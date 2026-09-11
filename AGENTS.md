@@ -8,11 +8,11 @@ Use the Mobile Engineering Playbook as the shared React Native / Expo engineerin
 
 Playbook repository: https://github.com/sergii/mobile-engineering-playbook
 Playbook version: v0.4.3
-Playbook revision: ec47e930b948fd67918bb0e812d704f1cf32362e
+Playbook revision: c202f19cba00a33f2c933c0b653a8e99d8686e24
 
 The exact revision is the reproducible baseline; the version is the human-readable release label. Read shared documents at that revision, never silently at `main`. Upgrade deliberately after reviewing the changes. Prefer a local checkout when its revision is verified.
 
-This contract merges the [product template at the adopted revision](https://github.com/sergii/mobile-engineering-playbook/blob/ec47e930b948fd67918bb0e812d704f1cf32362e/templates/product/AGENTS.md) with the Expo-generated instructions above. The template's stale v0.4.2 metadata is superseded by the explicitly adopted metadata here.
+This contract merges the [product template at the adopted revision](https://github.com/sergii/mobile-engineering-playbook/blob/c202f19cba00a33f2c933c0b653a8e99d8686e24/templates/product/AGENTS.md) with the Expo-generated instructions above.
 
 ## Product context
 
@@ -28,7 +28,7 @@ Future camera/inventory workflows do not select `camera-operational` for the who
 
 Generated with `npx create-expo-app@latest .` using the default SDK 57 template, Expo Router, React Native 0.86.3, React 19.2.3, and strict TypeScript. Preserve Expo-supported version alignment and the New Architecture.
 
-Use Node 22.23.1 (`.nvmrc`) and npm 10.9.8, the bootstrap toolchain. The host's npm 12 failed because its `npm pack --json` output was incompatible with create-expo-app 4.0.0. Keep `package-lock.json` as the dependency lockfile.
+Use Node 22.23.1 (`.nvmrc`) and npm 10.9.8 (`package.json`'s `packageManager`), the verified bootstrap toolchain. create-expo-app 4.0.0 is incompatible with npm 12's `npm pack --json` output format. Keep `package-lock.json` as the dependency lockfile.
 
 ```text
 install: npm ci
@@ -76,4 +76,3 @@ Do not load every shared document for every small task. Read product/domain docu
 - Expo icons/splash assets remain development placeholders. Branded assets, release policy, backend contracts, accounts, storage, and camera workflows are deferred.
 - Keep code comments in English. Do not infer booking/resource models or claim offline synchronization before product requirements define them.
 - Run strict TypeScript, lint, and relevant Expo checks. Inspect the running app on targeted platforms and state verification limits honestly. Expo Go does not verify native identity, custom-scheme registration, config-plugin output, signing, or release behavior.
-- For numbered task lists, after each completed numbered subtask run `~/.codex/hooks/notify_sound.py '{"type":"progress-update"}'`. When all subtasks are complete, do not run another progress sound; normal Codex completion handles the final sound.

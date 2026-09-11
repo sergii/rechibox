@@ -7,8 +7,8 @@ This repository currently contains only a walking skeleton: Expo Router resolves
 ## Engineering baseline
 
 - Playbook version: **v0.4.3**
-- Playbook revision: **ec47e930b948fd67918bb0e812d704f1cf32362e**
-- [Shared playbook at the adopted revision](https://github.com/sergii/mobile-engineering-playbook/tree/ec47e930b948fd67918bb0e812d704f1cf32362e)
+- Playbook revision: **c202f19cba00a33f2c933c0b653a8e99d8686e24**
+- [Shared playbook at the adopted revision](https://github.com/sergii/mobile-engineering-playbook/tree/c202f19cba00a33f2c933c0b653a8e99d8686e24)
 - Archetype: **none**
 - Target platforms: **iOS, Android**
 - Native ownership: **CNG / Prebuild**
@@ -19,7 +19,7 @@ Bootstrapped with `npx create-expo-app@latest .` (create-expo-app 4.0.0, default
 
 ## Run locally
 
-Use Node **22.23.1** from `.nvmrc` and npm **10.9.8**, then:
+Use Node **22.23.1** from `.nvmrc` and npm **10.9.8** from `package.json`'s `packageManager`, then:
 
 ```sh
 nvm use
@@ -27,7 +27,7 @@ npm ci
 npm start
 ```
 
-The host's Node 26/npm 12 failed during bootstrap because create-expo-app 4.0.0 did not accept npm 12's `npm pack --json` format. The same bootstrap command succeeded with the installed Node 22/npm 10 toolchain.
+The verified bootstrap toolchain is Node 22.23.1/npm 10.9.8. create-expo-app 4.0.0 is incompatible with npm 12's `npm pack --json` output format.
 
 | Command | Purpose |
 | --- | --- |
@@ -94,7 +94,6 @@ Verified on 2026-09-12:
 - `npx expo install --check` reported compatible dependencies; `npx expo-doctor` passed all 21 checks.
 - `npx expo config --type public` confirmed the safe identity and absence of bundle/package IDs, production endpoints, and EAS project configuration.
 - Expo Go loaded the home route on an iPhone 17 Pro simulator (iOS 26.5) and the existing Pixel 8 Android emulator. Both native Metro bundles succeeded. The home text was verified through accessibility inspection and screenshots in light and dark appearance, including status bars and safe-area layout. Expo's floating developer button is runtime UI, not part of Rechibox.
-- The initial `--localhost` Metro run bound only to IPv6 while its launch URL used IPv4. Using the documented default `npm start` resolved simulator connectivity. The Android emulator required a headless restart with software rendering after its initial host graphics crash.
 
 This verifies the JavaScript skeleton in Expo Go. A custom native binary, native registration of `rechibox://`, app icons/splash configuration, signing, store builds, physical devices, and release behavior have not been verified. Keyboard and business-workflow checks are not applicable to this screen.
 
