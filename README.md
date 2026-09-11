@@ -99,6 +99,14 @@ Verified on 2026-09-12:
 - `npx expo config --type public` confirmed the safe identity and absence of bundle/package IDs, production endpoints, and EAS project configuration.
 - Expo Go loaded the home route on an iPhone 17 Pro simulator (iOS 26.5) and the existing Pixel 8 Android emulator. Both native Metro bundles succeeded. The home text was verified through accessibility inspection and screenshots in light and dark appearance, including status bars and safe-area layout. Expo's floating developer button is runtime UI, not part of Rechibox.
 
-This verifies the JavaScript skeleton in Expo Go. A custom native binary, native registration of `rechibox://`, app icons/splash configuration, signing, store builds, physical devices, and release behavior have not been verified. Keyboard and business-workflow checks are not applicable to this screen.
+This verifies the JavaScript app in Expo Go. A custom native binary, native registration of `rechibox://`, app icons/splash configuration, signing, store builds, physical devices, and release behavior have not been verified.
+
+## Current slice verification
+
+Verified on 2026-09-12 in Expo Go:
+
+- iPhone 17 Pro simulator: Home → options → available selection → details → confirmation/result → choose another option. The unavailable option remained disabled; invalid `/storage/does-not-exist` showed its recovery state; details back navigation and list-to-home back navigation worked. Light and dark screenshots showed readable content, correct status-bar/safe-area spacing, and reachable primary buttons.
+- Pixel 8 Android emulator: the same selection, confirmation/result, choose-another, and alternate selection flow worked. Accessibility inspection confirmed the unavailable option stayed disabled and unselected; the invalid deep link showed recovery and returned to options; system back from details returned to options. Light and dark screenshots showed readable content, correct status-bar/bottom-inset spacing, and reachable primary buttons.
+- No product behavior or application code changes were needed for this verification pass.
 
 The generated dependency graph reported 14 moderate npm audit findings during installation, also present before demo cleanup. No forced dependency upgrades were applied. Expo Doctor compatibility checks are not a security audit.

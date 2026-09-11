@@ -66,7 +66,7 @@ Do not load every shared document for every small task. Read product/domain docu
 
 ## Product-specific rules
 
-- Start with a minimal walking skeleton: `/` renders the Rechibox home screen. Use Ukrainian for initial user-facing copy.
+- `/` remains the lightweight customer entry point. Grow product behavior through thin vertical slices, and do not add infrastructure ahead of demonstrated product needs.
 - Use React Native primitives and `StyleSheet`. Keep files close to the implemented behavior; do not add speculative feature folders or layers.
 - Add UI frameworks, styling systems, state/query libraries, persistence, auth, analytics, animations, or other infrastructure only for a concrete requirement.
 - Check dependency and peer-dependency requirements before cleanup. SDK 57's Router brings `@expo/ui`, glass/symbol helpers, and drawer/gesture/animation dependencies transitively; their installation is not adoption of their APIs by this product.
