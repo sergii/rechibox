@@ -2,7 +2,7 @@
 
 A self-storage / smart-storage mobile product for the Ukrainian market.
 
-This repository currently contains only a walking skeleton: Expo Router resolves `/` to a Ukrainian home screen built with React Native primitives and `StyleSheet`, with safe-area handling and system light/dark appearance.
+This repository contains the first thin customer flow: Expo Router resolves `/` to a Ukrainian home screen, which leads through clearly labeled local mock storage options, option details, and a local confirmation result. It uses React Native primitives and `StyleSheet`, with safe-area handling and system light/dark appearance. The confirmation is a demonstration only; it does not create or persist a reservation.
 
 ## Engineering baseline
 
@@ -48,6 +48,10 @@ The native run scripts use Expo Go and do not generate native projects. The curr
 src/app/
   _layout.tsx          Router stack, system appearance, status bar
   index.tsx            / home screen and its safe-area insets
+  storage/index.tsx    /storage mock option selection
+  storage/[id].tsx     /storage/[id] details and local result state
+src/storage/
+  mock-options.ts       Clearly labeled local fixtures for the slice
 assets/
   expo.icon/           Generated iOS icon placeholder
   images/              Generated app icon, splash, and favicon placeholders
@@ -84,7 +88,7 @@ No runtime dependency was added beyond the generated template. Ten demo-only dir
 
 Only display name **Rechibox**, slug **rechibox**, and URL scheme **rechibox** are configured. Apple bundle identifier, Android package identifier, production domain/API URL, EAS project ID, and signing configuration are unset.
 
-Backend, accounts/authentication, booking/inventory behavior, camera permissions, persistence/offline sync, state/query libraries, UI frameworks, analytics, branding, and build/release/OTA policies await concrete product requirements. There is no automated test suite yet; this static skeleton is checked with TypeScript, lint, Expo diagnostics, and runtime inspection.
+Backend, accounts/authentication, real booking/inventory behavior, camera permissions, persistence/offline sync, state/query libraries, UI frameworks, analytics, branding, and build/release/OTA policies await concrete product requirements. The slice uses local React state only; its sizes, prices, facility label, and availability are fictional fixtures rather than product rules. There is no automated test suite yet; the app is checked with TypeScript, lint, Expo diagnostics, and runtime inspection.
 
 ## Bootstrap verification
 

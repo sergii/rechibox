@@ -7,8 +7,10 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="index" options={{ title: 'Rechibox' }} />
+      <Stack screenOptions={{ headerBackTitle: 'Назад' }}>
+        <Stack.Screen name="index" options={{ title: 'Rechibox', headerShown: false }} />
+        <Stack.Screen name="storage/index" options={{ title: 'Варіанти зберігання' }} />
+        <Stack.Screen name="storage/[id]" options={{ title: 'Деталі варіанта' }} />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
