@@ -1,6 +1,8 @@
 import { useRouter, useTheme } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { RechiboxLogo } from '@/components/RechiboxLogo';
 
 export default function HomeScreen() {
   const { colors } = useTheme();
@@ -9,9 +11,9 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>
-          Rechibox
-        </Text>
+        <View accessible accessibilityLabel="Rechibox" accessibilityRole="image" style={styles.logo}>
+          <RechiboxLogo color={colors.text} />
+        </View>
         <Text style={[styles.description, { color: colors.text }]}>
           Простір для ваших речей.
         </Text>
@@ -44,9 +46,10 @@ const styles = StyleSheet.create({
     padding: 24,
     gap: 12,
   },
-  title: {
-    fontSize: 36,
-    fontWeight: '700',
+  logo: {
+    width: 300,
+    height: 70,
+    alignSelf: 'flex-start',
   },
   description: {
     fontSize: 18,
