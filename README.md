@@ -6,9 +6,9 @@ This repository contains the first thin customer flow: Expo Router resolves `/` 
 
 ## Engineering baseline
 
-- Playbook version: **v0.4.3**
-- Playbook revision: **c202f19cba00a33f2c933c0b653a8e99d8686e24**
-- [Shared playbook at the adopted revision](https://github.com/sergii/mobile-engineering-playbook/tree/c202f19cba00a33f2c933c0b653a8e99d8686e24)
+- Playbook version: **v0.4.4**
+- Playbook revision: **4901486d9373c5b895bf466d9438eec9b08b89ed**
+- [Shared playbook at the adopted revision](https://github.com/sergii/mobile-engineering-playbook/tree/4901486d9373c5b895bf466d9438eec9b08b89ed)
 - Archetype: **none**
 - Target platforms: **iOS, Android**
 - Native ownership: **CNG / Prebuild**

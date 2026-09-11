@@ -7,12 +7,12 @@ Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before 
 Use the Mobile Engineering Playbook as the shared React Native / Expo engineering baseline.
 
 Playbook repository: https://github.com/sergii/mobile-engineering-playbook
-Playbook version: v0.4.3
-Playbook revision: c202f19cba00a33f2c933c0b653a8e99d8686e24
+Playbook version: v0.4.4
+Playbook revision: 4901486d9373c5b895bf466d9438eec9b08b89ed
 
 The exact revision is the reproducible baseline; the version is the human-readable release label. Read shared documents at that revision, never silently at `main`. Upgrade deliberately after reviewing the changes. Prefer a local checkout when its revision is verified.
 
-This contract merges the [product template at the adopted revision](https://github.com/sergii/mobile-engineering-playbook/blob/c202f19cba00a33f2c933c0b653a8e99d8686e24/templates/product/AGENTS.md) with the Expo-generated instructions above.
+This contract merges the [product template at the adopted revision](https://github.com/sergii/mobile-engineering-playbook/blob/4901486d9373c5b895bf466d9438eec9b08b89ed/templates/product/AGENTS.md) with the Expo-generated instructions above.
 
 ## Product context
 
