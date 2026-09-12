@@ -40,11 +40,11 @@ type PhotoWithDetectionsProps = {
 
 const LOCAL_AI_NOTICE =
   'Розпізнавання виконується локально на пристрої. Фото не завантажується на сервер.';
-const DETECTOR_MODEL_NAME = 'SSDLite320 MobileNetV3 Large · XNNPACK FP32';
-const CONFIDENCE_THRESHOLD = 0.45;
+const DETECTOR_MODEL_NAME = 'YOLO26 XLARGE 640 · XNNPACK FP32';
+const CONFIDENCE_THRESHOLD = 0.25;
 const IOU_THRESHOLD = 0.55;
 
-const DETECTOR_MODEL = models.objectDetection.SSDLITE320_MOBILENET_V3_LARGE.XNNPACK_FP32;
+const DETECTOR_MODEL = models.objectDetection.YOLO26.XLARGE.SIZE_640.XNNPACK_FP32;
 
 function PhotoWithDetections({
   uri,
