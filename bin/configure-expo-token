@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="sergii/rechibox"
+REPO="${RECHIBOX_GITHUB_REPO:-sergii/rechibox}"
 TOKEN_URL="https://expo.dev/settings/access-tokens"
 
 if ! command -v gh >/dev/null 2>&1; then
@@ -21,15 +21,36 @@ if command -v open >/dev/null 2>&1; then
 fi
 
 echo "Create an Expo personal access token in the browser."
-read -r -s -p "Paste the Expo token here (input hidden): " EXPO_TOKEN_VALUE
-echo
+echo "The terminal will wait here until you paste it."
+echo "Type 'skip' only if you intentionally want to stop before configuring GitHub Actions."
 
-if [ -z "$EXPO_TOKEN_VALUE" ]; then
-  echo "Token was empty. Nothing changed."
+while true; do
+  read -r -s -p "Paste the Expo token here (input hidden): " EXPO_TOKEN_VALUE
+  echo
+
+  if [ "$EXPO_TOKEN_VALUE" = "skip" ]; then
+    unset EXPO_TOKEN_VALUE
+    echo "Token configuration skipped."
+    exit 2
+  fi
+
+  if [ -z "$EXPO_TOKEN_VALUE" ]; then
+    echo "No token was entered. Create/copy the token in the browser, then paste it here."
+    continue
+  fi
+
+  if printf '%s' "$EXPO_TOKEN_VALUE" | gh secret set EXPO_TOKEN --repo "$REPO"; then
+    unset EXPO_TOKEN_VALUE
+    break
+  fi
+
+  unset EXPO_TOKEN_VALUE
+  echo "GitHub did not accept the secret update. Try again."
+done
+
+if gh secret list --repo "$REPO" | awk '{print $1}' | grep -qx 'EXPO_TOKEN'; then
+  echo "EXPO_TOKEN is configured for $REPO."
+else
+  echo "Could not verify EXPO_TOKEN in GitHub Actions secrets."
   exit 1
 fi
-
-printf '%s' "$EXPO_TOKEN_VALUE" | gh secret set EXPO_TOKEN --repo "$REPO"
-unset EXPO_TOKEN_VALUE
-
-echo "EXPO_TOKEN is configured for $REPO."
