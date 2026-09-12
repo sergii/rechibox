@@ -58,6 +58,7 @@
     "iphone": "bash ./bin/run-on-real-device ios",
     "iphone:native": "bash ./bin/run-native-iphone",
     "iphone:release": "bash ./bin/run-release-iphone",
+    "eas:setup": "bash ./bin/setup-eas-ios",
     "eas:bootstrap": "bash ./bin/bootstrap-eas",
     "eas:check": "bash ./bin/check-eas-readiness",
     "eas:token": "bash ./bin/configure-expo-token",
@@ -66,8 +67,8 @@
     "eas:credentials:ios": "npx eas-cli@latest credentials:configure-build -p ios -e preview",
     "eas:build:preview:ios": "npx eas-cli@latest build -p ios -e preview --no-wait",
     "eas:build:production:ios": "npx eas-cli@latest build -p ios -e production --no-wait",
-    "eas:update:preview": "npx eas-cli@latest update --channel preview --auto",
-    "eas:update:production": "npx eas-cli@latest update --channel production --auto",
+    "eas:update:preview": "npx eas-cli@latest update --channel preview --environment preview --auto",
+    "eas:update:production": "npx eas-cli@latest update --channel production --environment production --auto",
     "web": "expo start --web",
     "lint": "expo lint"
   },
