@@ -21,6 +21,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Validate shell helpers
+        run: bash -n bin/*
+
       - name: Typecheck
         run: npm run typecheck
 
