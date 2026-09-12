@@ -19,7 +19,7 @@ if [[ "$ACTUAL_NODE" != "$EXPECTED_NODE" || "$ACTUAL_NPM" != "$EXPECTED_NPM" ]];
   exit 1
 fi
 
-for command in xcodebuild xcrun security; do
+for command in xcodebuild xcrun security ruby; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "Missing required command: $command" >&2
     exit 1
@@ -38,20 +38,55 @@ if [[ -z "$BUNDLE_ID" ]]; then
   exit 1
 fi
 
-DEVICES_RAW="$(xcrun devicectl list devices 2>/dev/null || true)"
-PAIRED_LINES="$(printf '%s\n' "$DEVICES_RAW" | awk '/iPhone|iPad/ { print }')"
-AVAILABLE_LINES="$(printf '%s\n' "$DEVICES_RAW" | awk '/iPhone|iPad/ && /[[:space:]]available([[:space:]]|$)/ { print }')"
-DEVICE_COUNT="$(printf '%s\n' "$AVAILABLE_LINES" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')"
+TMP_DIR="$(mktemp -d)"
+RESTORE_PACKAGE_FILES=0
+cleanup() {
+  if [[ "$RESTORE_PACKAGE_FILES" -eq 1 ]]; then
+    cp "$TMP_DIR/package.json" package.json
+    if [[ -f "$TMP_DIR/package-lock.json" ]]; then
+      cp "$TMP_DIR/package-lock.json" package-lock.json
+    fi
+  fi
+  rm -rf "$TMP_DIR"
+}
+trap cleanup EXIT
+
+DEVICES_JSON="$TMP_DIR/devices.json"
+if ! xcrun devicectl list devices --json-output "$DEVICES_JSON" --timeout 5 >/dev/null 2>&1; then
+  echo "CoreDevice could not enumerate Apple devices." >&2
+  exit 1
+fi
+
+DEVICE_LINES="$(ruby -rjson -e '
+  data = JSON.parse(File.read(ARGV.fetch(0)))
+  devices = data.dig("result", "devices") || []
+
+  devices.each do |device|
+    hardware = device["hardwareProperties"] || {}
+    properties = device["deviceProperties"] || {}
+    connection = device["connectionProperties"] || {}
+
+    next unless hardware["reality"] == "physical"
+    next unless ["iOS", "xrOS"].include?(hardware["platform"])
+    next unless connection["pairingState"] == "paired"
+    next if connection["tunnelState"] == "unavailable"
+
+    fields = [
+      hardware["udid"],
+      properties["name"],
+      hardware["marketingName"],
+      connection["transportType"]
+    ].map { |value| value.to_s.gsub("\t", " ") }
+
+    puts fields.join("\t")
+  end
+' "$DEVICES_JSON")"
+
+DEVICE_COUNT="$(printf '%s\n' "$DEVICE_LINES" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')"
 
 if [[ "$DEVICE_COUNT" == "0" ]]; then
-  echo "No currently available physical iPhone/iPad was found by CoreDevice." >&2
-  if [[ -n "$PAIRED_LINES" ]]; then
-    echo >&2
-    echo "Paired Apple devices:" >&2
-    printf '%s\n' "$PAIRED_LINES" >&2
-  fi
-  echo >&2
-  echo "Unlock the phone, reconnect it if needed, accept Trust/Developer Mode prompts, and wait until 'xcrun devicectl list devices' reports 'available (paired)'." >&2
+  echo "No available paired physical iPhone/iPad was found by CoreDevice." >&2
+  echo "Unlock the phone, enable Developer Mode, and run 'npm run device:check'." >&2
   exit 1
 fi
 
@@ -60,22 +95,56 @@ echo "Bundle identifier: $BUNDLE_ID"
 echo "Signing identity: $SIGNING_IDENTITY"
 echo
 echo "Available physical Apple devices:"
-printf '%s\n' "$AVAILABLE_LINES"
+printf '%s\n' "$DEVICE_LINES" | awk -F '\t' '{ printf "  %s — %s (%s, %s)\n", $2, $3, $1, $4 }'
 echo
+
+if [[ ! -d ios ]]; then
+  echo "Generating the iOS native project with CNG (dependency installation deferred)."
+  cp package.json "$TMP_DIR/package.json"
+  if [[ -f package-lock.json ]]; then
+    cp package-lock.json "$TMP_DIR/package-lock.json"
+  fi
+  RESTORE_PACKAGE_FILES=1
+  npx expo prebuild --platform ios --no-install
+  cp "$TMP_DIR/package.json" package.json
+  if [[ -f "$TMP_DIR/package-lock.json" ]]; then
+    cp "$TMP_DIR/package-lock.json" package-lock.json
+  fi
+  RESTORE_PACKAGE_FILES=0
+fi
+
+if [[ ! -d ios/Pods || ! -f ios/Podfile.lock ]]; then
+  echo "Installing CocoaPods with a Ruby 3.4-compatible gem set (CocoaPods 1.17.0, ActiveSupport < 8, JSON < 3)."
+  (
+    cd ios
+    ruby -e '
+      gem "json", "< 3"
+      gem "activesupport", ">= 7", "< 8"
+      gem "cocoapods", "= 1.17.0"
+      load Gem.bin_path("cocoapods", "pod", "1.17.0")
+    ' -- install --repo-update
+  )
+else
+  echo "Using existing ios/Pods and Podfile.lock."
+fi
 
 if [[ "$DEVICE_COUNT" -gt 1 ]]; then
   echo "Multiple physical Apple devices are available; Expo will ask which one to use."
-  exec npx expo run:ios --device
+  echo
+  exec npx expo run:ios --device --no-install
 fi
 
-DEVICE_NAME="$(printf '%s\n' "$AVAILABLE_LINES" | sed -E 's/[[:space:]]{2,}/|/g' | cut -d '|' -f 1 | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+FIRST_DEVICE="$(printf '%s\n' "$DEVICE_LINES" | head -n 1)"
+IFS=$'\t' read -r DEVICE_UDID DEVICE_NAME DEVICE_MODEL DEVICE_TRANSPORT <<< "$FIRST_DEVICE"
 
-if [[ -z "$DEVICE_NAME" ]]; then
-  echo "Could not parse the available device name; falling back to Expo's device selector."
-  exec npx expo run:ios --device
+if [[ -z "$DEVICE_UDID" ]]; then
+  echo "Could not resolve the hardware UDID for the available iPhone/iPad." >&2
+  exit 1
 fi
 
-echo "Building, installing, and launching on: $DEVICE_NAME"
-echo "CNG may generate ios/ locally; it remains ignored and app.json/config plugins stay the source of truth."
+echo "Building, installing, and launching on: $DEVICE_NAME ($DEVICE_MODEL)"
+echo "Expo target UDID: $DEVICE_UDID"
+echo "Connection: $DEVICE_TRANSPORT"
+echo "Generated ios/ output remains ignored; app.json/config plugins stay the source of truth."
 echo
-exec npx expo run:ios --device "$DEVICE_NAME"
+exec npx expo run:ios --device "$DEVICE_UDID" --no-install
