@@ -2,12 +2,24 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+EXPO_SIGNUP_URL="https://expo.dev/signup"
 cd "$ROOT_DIR"
 
+open_url() {
+  if command -v open >/dev/null 2>&1; then
+    open "$1" >/dev/null 2>&1 || true
+  fi
+}
+
 echo "==> Checking Expo authentication"
-if ! npx eas-cli@latest whoami >/dev/null 2>&1; then
-  echo "No active Expo session. Starting interactive login..."
-  npx eas-cli@latest login
+echo "The first EAS CLI run may download the CLI package."
+if ! npx --yes eas-cli@latest whoami; then
+  echo
+  echo "No active Expo session was found."
+  echo "If you do not have an Expo account yet, create one in the browser."
+  open_url "$EXPO_SIGNUP_URL"
+  read -r -p "Press Enter when your Expo account is ready... " _
+  npx --yes eas-cli@latest login
 fi
 
 echo "==> Ensuring expo-updates is installed"
@@ -21,14 +33,14 @@ if node -e "const a=require('./app.json').expo; process.exit(a?.extra?.eas?.proj
   echo "==> EAS project is already linked"
 else
   echo "==> Initializing EAS project"
-  npx eas-cli@latest init
+  npx --yes eas-cli@latest init
 fi
 
 if node -e "const a=require('./app.json').expo; process.exit(a?.updates?.url ? 0 : 1)"; then
   echo "==> EAS Update is already configured"
 else
   echo "==> Configuring EAS Update"
-  npx eas-cli@latest update:configure
+  npx --yes eas-cli@latest update:configure
 fi
 
 echo "==> Verifying local EAS configuration"
