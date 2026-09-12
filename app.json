@@ -43,7 +43,17 @@
           "barcodeScannerEnabled": false
         }
       ],
-      "expo-build-properties"
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "17.0"
+          },
+          "android": {
+            "minSdkVersion": 26
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

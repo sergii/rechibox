@@ -31,6 +31,14 @@
     "eslint-config-expo": "~57.0.2",
     "typescript": "~6.0.3"
   },
+  "react-native-executorch": {
+    "backends": [
+      "xnnpack"
+    ],
+    "libs": [
+      "opencv"
+    ]
+  },
   "scripts": {
     "start": "expo start",
     "typecheck": "tsc --noEmit",
