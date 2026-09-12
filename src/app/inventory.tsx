@@ -38,6 +38,9 @@ type PhotoWithDetectionsProps = {
 
 const LOCAL_AI_NOTICE =
   'Розпізнавання виконується локально на пристрої. Фото не завантажується на сервер.';
+const DETECTOR_MODEL_NAME = 'SSDLite320 MobileNetV3 Large · XNNPACK FP32';
+const CONFIDENCE_THRESHOLD = 0.45;
+const IOU_THRESHOLD = 0.55;
 
 const DETECTOR_MODEL = models.objectDetection.SSDLITE320_MOBILENET_V3_LARGE.XNNPACK_FP32;
 
@@ -121,6 +124,7 @@ export default function InventoryScreen() {
   const [cameraReady, setCameraReady] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   const [recognitionMs, setRecognitionMs] = useState<number | null>(null);
+  const [debugMode, setDebugMode] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const skiaImage = useImage(photoUri);
@@ -226,8 +230,8 @@ export default function InventoryScreen() {
           layout: 'hwc',
         },
         {
-          confidenceThreshold: 0.45,
-          iouThreshold: 0.55,
+          confidenceThreshold: CONFIDENCE_THRESHOLD,
+          iouThreshold: IOU_THRESHOLD,
         }
       );
 
@@ -500,6 +504,21 @@ export default function InventoryScreen() {
                 <Text style={[styles.body, { color: colors.text }]}>
                   Виправте назви або вимкніть речі, які не потрібно додавати.
                 </Text>
+                <View
+                  style={[
+                    styles.debugToggleRow,
+                    { backgroundColor: colors.card, borderColor: colors.border },
+                  ]}>
+                  <View style={styles.debugToggleCopy}>
+                    <Text style={[styles.debugToggleTitle, { color: colors.text }]}>Debug mode</Text>
+                    <Text style={[styles.note, { color: colors.text }]}>Показувати сирі дані detector-а</Text>
+                  </View>
+                  <Switch
+                    accessibilityLabel="Debug mode"
+                    onValueChange={setDebugMode}
+                    value={debugMode}
+                  />
+                </View>
                 <PhotoWithDetections
                   backgroundColor={colors.card}
                   imageHeight={photoHeight}
@@ -507,10 +526,25 @@ export default function InventoryScreen() {
                   items={items}
                   uri={photoUri}
                 />
-                {recognitionMs !== null ? (
-                  <Text style={[styles.note, { color: colors.text }]}>
-                    Локальне розпізнавання: {recognitionMs} мс · знайдено {items.length}
-                  </Text>
+                {debugMode ? (
+                  <View
+                    style={[
+                      styles.debugPanel,
+                      { backgroundColor: colors.card, borderColor: colors.border },
+                    ]}>
+                    <Text style={[styles.debugToggleTitle, { color: colors.text }]}>Detector debug</Text>
+                    <Text style={[styles.debugCode, { color: colors.text }]}>model: {DETECTOR_MODEL_NAME}</Text>
+                    <Text style={[styles.debugCode, { color: colors.text }]}>image: {photoWidth}×{photoHeight}</Text>
+                    <Text style={[styles.debugCode, { color: colors.text }]}>inference: {recognitionMs ?? '—'} ms</Text>
+                    <Text style={[styles.debugCode, { color: colors.text }]}>detections: {items.length}</Text>
+                    <Text style={[styles.debugCode, { color: colors.text }]}>confidence threshold: {CONFIDENCE_THRESHOLD}</Text>
+                    <Text style={[styles.debugCode, { color: colors.text }]}>IoU threshold: {IOU_THRESHOLD}</Text>
+                    {items.map((item, index) => (
+                      <Text key={`debug-${item.id}`} style={[styles.debugCode, { color: colors.text }]}>
+                        {index + 1}. {item.sourceLabel} · {(item.confidence * 100).toFixed(1)}% · [{item.box.xmin.toFixed(0)}, {item.box.ymin.toFixed(0)}, {item.box.xmax.toFixed(0)}, {item.box.ymax.toFixed(0)}]
+                      </Text>
+                    ))}
+                  </View>
                 ) : null}
                 {items.length === 0 ? (
                   <Text accessibilityLiveRegion="polite" style={[styles.note, { color: colors.text }]}>
@@ -740,6 +774,29 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   secondaryButtonText: { fontSize: 16, fontWeight: '600', textAlign: 'center' },
+  debugToggleRow: {
+    minHeight: 64,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  debugToggleCopy: { flex: 1, gap: 2 },
+  debugToggleTitle: { fontSize: 14, lineHeight: 20, fontWeight: '700' },
+  debugPanel: {
+    padding: 14,
+    gap: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+  },
+  debugCode: {
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }),
+    fontSize: 12,
+    lineHeight: 18,
+  },
   itemCard: {
     padding: 12,
     gap: 8,
