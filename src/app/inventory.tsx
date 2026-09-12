@@ -3,6 +3,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useTheme } from 'expo-router';
 import { models, useObjectDetector } from 'react-native-executorch';
 import { useEffect, useRef, useState } from 'react';
+import type { ColorValue } from 'react-native';
 import {
   ActivityIndicator,
   AppState,
@@ -32,7 +33,7 @@ type PhotoWithDetectionsProps = {
   items: InventoryRecognitionItem[];
   imageWidth: number;
   imageHeight: number;
-  backgroundColor: string;
+  backgroundColor: ColorValue;
 };
 
 const LOCAL_AI_NOTICE =
