@@ -1,0 +1,40 @@
+{
+  "componentsDir": "components/ui",
+  "utilPath": "lib/utils.ts",
+  "theme": "default",
+  "style": "uniwind",
+  "tsx": true,
+  "sdkGeneration": "v5",
+  "installed": {
+    "text": {
+      "version": "0.7.0",
+      "hash": "e1729b9b",
+      "addedAt": "2026-09-12T13:17:16.812Z"
+    },
+    "switch": {
+      "version": "0.7.0",
+      "hash": "a3261fb4",
+      "addedAt": "2026-09-12T13:17:16.813Z"
+    },
+    "theme-provider": {
+      "version": "0.7.0",
+      "hash": "42502531",
+      "addedAt": "2026-09-12T13:17:16.813Z"
+    },
+    "input": {
+      "version": "0.7.0",
+      "hash": "58a24cd9",
+      "addedAt": "2026-09-12T13:17:16.813Z"
+    },
+    "card": {
+      "version": "0.7.0",
+      "hash": "01af7b1d",
+      "addedAt": "2026-09-12T13:17:16.814Z"
+    },
+    "button": {
+      "version": "0.7.0",
+      "hash": "a949db07",
+      "addedAt": "2026-09-12T13:17:16.814Z"
+    }
+  }
+}
