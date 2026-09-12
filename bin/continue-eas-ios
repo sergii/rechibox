@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO="${RECHIBOX_GITHUB_REPO:-sergii/rechibox}"
+cd "$ROOT_DIR"
+
+section() {
+  echo
+  echo "==> $1"
+}
+
+confirm() {
+  local prompt="$1"
+  local answer
+  read -r -p "$prompt [Y/n] " answer
+  case "${answer:-Y}" in
+    y|Y|yes|YES|Yes) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+section "Resume EAS setup"
+
+if ! bash ./bin/check-eas-readiness >/dev/null 2>&1; then
+  echo "EAS project configuration is incomplete. Running bootstrap first..."
+  bash ./bin/bootstrap-eas
+fi
+
+if ! command -v gh >/dev/null 2>&1; then
+  if command -v brew >/dev/null 2>&1; then
+    echo "GitHub CLI is missing. Installing it with Homebrew..."
+    brew install gh
+  else
+    echo "GitHub CLI (gh) is required. Install it and rerun this command."
+    exit 1
+  fi
+fi
+
+if ! gh auth status >/dev/null 2>&1; then
+  echo "GitHub CLI is not authenticated. Starting login..."
+  gh auth login
+fi
+
+if gh secret list --repo "$REPO" 2>/dev/null | awk '{print $1}' | grep -qx 'EXPO_TOKEN'; then
+  echo "EXPO_TOKEN is already configured."
+else
+  bash ./bin/configure-expo-token
+fi
+
+section "Verify Expo/EAS project"
+bash ./bin/check-eas-readiness
+npx eas-cli@latest project:status
+
+section "Commit generated EAS configuration"
+EXPECTED_FILES=(app.json eas.json package.json package-lock.json)
+CHANGED_EXPECTED=()
+
+for file in "${EXPECTED_FILES[@]}"; do
+  if git status --porcelain -- "$file" | grep -q .; then
+    CHANGED_EXPECTED+=("$file")
+  fi
+done
+
+if [ "${#CHANGED_EXPECTED[@]}" -gt 0 ]; then
+  git add -- "${CHANGED_EXPECTED[@]}"
+  if ! git diff --cached --quiet; then
+    git commit -m "Configure Expo EAS deployment"
+    git push
+  fi
+else
+  echo "No generated EAS configuration changes need to be committed."
+fi
+
+OTHER_CHANGES="$(git status --porcelain | grep -vE ' (app.json|eas.json|package.json|package-lock.json)$' || true)"
+if [ -n "$OTHER_CHANGES" ]; then
+  echo "Other local changes remain unstaged:"
+  printf '%s\n' "$OTHER_CHANGES"
+fi
+
+section "Register iPhone for internal distribution"
+if confirm "Register an iPhone now?"; then
+  npx eas-cli@latest device:create
+else
+  echo "Skipping device registration."
+fi
+
+section "Create first iOS preview cloud build"
+if confirm "Start the first iOS preview build now?"; then
+  npx eas-cli@latest build --platform ios --profile preview
+else
+  echo "Skipping the first preview build."
+fi
+
+echo
+echo "EAS setup continuation finished."
