@@ -65,4 +65,4 @@ jobs:
         if: steps.readiness.outputs.ready == 'true'
         uses: expo/expo-github-action/preview@v8
         with:
-          command: eas update --auto
+          command: eas update --auto --environment preview
