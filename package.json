@@ -3,6 +3,14 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "packageManager": "npm@10.9.8",
+  "react-native-executorch": {
+    "backends": [
+      "xnnpack"
+    ],
+    "libs": [
+      "opencv"
+    ]
+  },
   "dependencies": {
     "expo": "~57.0.22",
     "expo-camera": "~57.0.5",
@@ -37,6 +45,7 @@
     "device:android": "bash ./bin/run-on-real-device android",
     "iphone": "bash ./bin/run-on-real-device ios",
     "iphone:native": "bash ./bin/run-native-iphone",
+    "ai:model:fetch": "bash ./bin/fetch-ai-model",
     "web": "expo start --web",
     "lint": "expo lint"
   },
