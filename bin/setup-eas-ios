@@ -3,19 +3,12 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO="${RECHIBOX_GITHUB_REPO:-sergii/rechibox}"
-EXPO_SIGNUP_URL="https://expo.dev/signup"
 
 cd "$ROOT_DIR"
 
 section() {
   echo
   echo "==> $1"
-}
-
-open_url() {
-  if command -v open >/dev/null 2>&1; then
-    open "$1" >/dev/null 2>&1 || true
-  fi
 }
 
 confirm() {
@@ -43,14 +36,7 @@ npm run typecheck
 npm run lint
 
 section "2/7 Sign in to Expo and configure the EAS project"
-if ! npx eas-cli@latest whoami >/dev/null 2>&1; then
-  echo "No active Expo session was found."
-  echo "If you do not have an Expo account yet, create one in the browser."
-  open_url "$EXPO_SIGNUP_URL"
-  read -r -p "Press Enter when your Expo account is ready... " _
-  npx eas-cli@latest login
-fi
-
+echo "Preparing EAS CLI. The first run can take a moment while npm downloads it."
 bash ./bin/bootstrap-eas
 
 section "3/7 Configure the GitHub Actions Expo token"
@@ -77,7 +63,7 @@ fi
 
 section "4/7 Verify EAS configuration"
 npm run eas:check
-npx eas-cli@latest project:status
+npx --yes eas-cli@latest project:status
 
 section "5/7 Commit and push generated EAS configuration"
 if [ -z "$INITIAL_DIRTY" ]; then
@@ -100,7 +86,7 @@ section "6/7 Register an iPhone for internal distribution"
 echo "An iOS preview build uses ad hoc signing, so the test iPhone must be registered."
 echo "Expo may open a registration URL or show a QR code. Complete the flow on the iPhone."
 if confirm "Register an iPhone now?"; then
-  npx eas-cli@latest device:create
+  npx --yes eas-cli@latest device:create
 else
   echo "Skipping device registration. You can run npm run eas:device:ios later."
 fi
@@ -108,7 +94,7 @@ fi
 section "7/7 Create the first iOS preview cloud build"
 echo "The first build can ask for Apple Developer login, 2FA, certificates, and provisioning."
 if confirm "Start the first iOS preview build now?"; then
-  npx eas-cli@latest build --platform ios --profile preview
+  npx --yes eas-cli@latest build --platform ios --profile preview
 else
   echo "Skipping the first build. You can run npm run eas:build:preview:ios later."
 fi
