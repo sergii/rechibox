@@ -39,12 +39,19 @@ if [[ -z "$BUNDLE_ID" ]]; then
 fi
 
 DEVICES_RAW="$(xcrun devicectl list devices 2>/dev/null || true)"
-AVAILABLE_LINES="$(printf '%s\n' "$DEVICES_RAW" | awk '/iPhone|iPad/ && /available/ { print }')"
+PAIRED_LINES="$(printf '%s\n' "$DEVICES_RAW" | awk '/iPhone|iPad/ { print }')"
+AVAILABLE_LINES="$(printf '%s\n' "$DEVICES_RAW" | awk '/iPhone|iPad/ && /[[:space:]]available([[:space:]]|$)/ { print }')"
 DEVICE_COUNT="$(printf '%s\n' "$AVAILABLE_LINES" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')"
 
 if [[ "$DEVICE_COUNT" == "0" ]]; then
-  echo "No available physical iPhone/iPad was found by CoreDevice." >&2
-  echo "Unlock and pair the device, enable Developer Mode if required, then run 'npm run device:check'." >&2
+  echo "No currently available physical iPhone/iPad was found by CoreDevice." >&2
+  if [[ -n "$PAIRED_LINES" ]]; then
+    echo >&2
+    echo "Paired Apple devices:" >&2
+    printf '%s\n' "$PAIRED_LINES" >&2
+  fi
+  echo >&2
+  echo "Unlock the phone, reconnect it if needed, accept Trust/Developer Mode prompts, and wait until 'xcrun devicectl list devices' reports 'available (paired)'." >&2
   exit 1
 fi
 
