@@ -1,0 +1,194 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+step() {
+  printf '\n\033[1;34m==> %s\033[0m\n' "$1"
+}
+
+fail() {
+  echo "flash: $*" >&2
+  exit 1
+}
+
+if [[ "$(uname -s)" != "Darwin" ]]; then
+  fail "hard iPhone flash requires macOS."
+fi
+
+for command in git node npm npx xcodebuild xcrun security ruby curl lsof; do
+  command -v "$command" >/dev/null 2>&1 || fail "missing required command: $command"
+done
+
+BRANCH="$(git branch --show-current)"
+[[ "$BRANCH" == "main" ]] || fail "expected branch main; found ${BRANCH:-detached HEAD}."
+
+git remote get-url origin >/dev/null 2>&1 || fail "git remote 'origin' is missing."
+
+if [[ -n "$(git diff --cached --name-only)" ]]; then
+  echo "Already-staged files were found:" >&2
+  git diff --cached --name-only >&2
+  fail "unstage them before running bin/flash so the dependency commit stays isolated."
+fi
+
+step "Environment"
+EXPECTED_NODE="$(tr -d 'v[:space:]' < .nvmrc)"
+EXPECTED_NPM="$(node -p "require('./package.json').packageManager.replace(/^npm@/, '')")"
+ACTUAL_NODE="$(node -v | sed 's/^v//')"
+ACTUAL_NPM="$(npm -v)"
+echo "Node: $ACTUAL_NODE (expected $EXPECTED_NODE)"
+echo "npm:  $ACTUAL_NPM (expected $EXPECTED_NPM)"
+[[ "$ACTUAL_NODE" == "$EXPECTED_NODE" ]] || fail "wrong Node version."
+[[ "$ACTUAL_NPM" == "$EXPECTED_NPM" ]] || fail "wrong npm version."
+
+step "Git sync check"
+git fetch origin main
+if ! git merge-base --is-ancestor origin/main HEAD; then
+  fail "local main does not contain origin/main. Run 'git pull --ff-only' first."
+fi
+
+step "Physical-device preflight"
+npm run device:check
+
+step "Install the known-good native AI dependency set"
+npm install --save \
+  react-native-executorch@0.10.2 \
+  react-native-worklets@0.10.4 \
+  react-native-blob-util@0.24.11 \
+  @shopify/react-native-skia@2.6.2 \
+  react-native-reanimated@4.5.1 \
+  'expo-build-properties@~57.0.17'
+
+step "Verify dependency graph"
+npm ls \
+  react-native-executorch \
+  react-native-worklets \
+  react-native-blob-util \
+  @shopify/react-native-skia \
+  react-native-reanimated \
+  expo-build-properties
+
+node <<'NODE'
+const fs = require('fs');
+const pkg = require('./package.json');
+const expected = {
+  'react-native-executorch': '0.10.2',
+  'react-native-worklets': '0.10.4',
+  'react-native-blob-util': '0.24.11',
+  '@shopify/react-native-skia': '2.6.2',
+  'react-native-reanimated': '4.5.1',
+};
+
+for (const [name, version] of Object.entries(expected)) {
+  if (!pkg.dependencies?.[name]) {
+    throw new Error(`${name} is not a direct dependency`);
+  }
+  const installed = JSON.parse(
+    fs.readFileSync(`node_modules/${name}/package.json`, 'utf8')
+  ).version;
+  if (installed !== version) {
+    throw new Error(`${name}: expected ${version}, found ${installed}`);
+  }
+  require.resolve(name);
+}
+
+const rne = pkg['react-native-executorch'];
+if (JSON.stringify(rne?.backends) !== JSON.stringify(['xnnpack'])) {
+  throw new Error('react-native-executorch.backends must be ["xnnpack"]');
+}
+if (JSON.stringify(rne?.libs) !== JSON.stringify(['opencv'])) {
+  throw new Error('react-native-executorch.libs must be ["opencv"]');
+}
+
+const app = require('./app.json');
+const buildPlugin = (app.expo?.plugins || []).find(
+  (plugin) => Array.isArray(plugin) && plugin[0] === 'expo-build-properties'
+);
+if (!buildPlugin) throw new Error('expo-build-properties plugin config is missing');
+const build = buildPlugin[1] || {};
+if (build.ios?.deploymentTarget !== '17.0') {
+  throw new Error('iOS deploymentTarget must be 17.0');
+}
+if (build.android?.minSdkVersion !== 26) {
+  throw new Error('Android minSdkVersion must be 26');
+}
+
+console.log('Direct dependency versions and native build config are correct.');
+NODE
+
+step "Provision ExecuTorch native artifacts"
+npm rebuild react-native-executorch
+
+node <<'NODE'
+const cfg = require('./node_modules/react-native-executorch/rne-build-config.json');
+const expected = {
+  enableOpencv: true,
+  enablePhonemis: false,
+  enableXnnpack: true,
+  enableCoreml: false,
+  enableMlx: false,
+  enableVulkan: false,
+};
+for (const [key, value] of Object.entries(expected)) {
+  if (cfg[key] !== value) {
+    throw new Error(`ExecuTorch ${key}: expected ${value}, found ${cfg[key]}`);
+  }
+}
+console.log(JSON.stringify(cfg, null, 2));
+NODE
+
+step "Project checks"
+npx expo install --check
+npm run typecheck
+npm run lint
+git diff --check
+
+step "Commit validated dependency changes"
+git add package.json package-lock.json
+if ! git diff --cached --quiet; then
+  git diff --cached --check
+  git commit -m "chore: sync native AI dependencies"
+  git push origin main
+else
+  echo "package.json and package-lock.json already match; nothing to commit."
+fi
+
+step "Stop stale Metro"
+METRO_PORT="${RCT_METRO_PORT:-8081}"
+METRO_STATUS_URL="http://127.0.0.1:${METRO_PORT}/status"
+METRO_STATUS="$(curl --silent --max-time 1 "$METRO_STATUS_URL" 2>/dev/null || true)"
+if [[ "$METRO_STATUS" == *"packager-status:running"* ]]; then
+  METRO_PIDS="$(lsof -tiTCP:"$METRO_PORT" -sTCP:LISTEN 2>/dev/null || true)"
+  if [[ -n "$METRO_PIDS" ]]; then
+    echo "Stopping Metro on port $METRO_PORT: $METRO_PIDS"
+    kill $METRO_PIDS 2>/dev/null || true
+    for _ in {1..20}; do
+      if ! lsof -nP -iTCP:"$METRO_PORT" -sTCP:LISTEN >/dev/null 2>&1; then
+        break
+      fi
+      sleep 0.25
+    done
+  fi
+elif lsof -nP -iTCP:"$METRO_PORT" -sTCP:LISTEN >/dev/null 2>&1; then
+  echo "Port $METRO_PORT is occupied by a non-Metro process:" >&2
+  lsof -nP -iTCP:"$METRO_PORT" -sTCP:LISTEN >&2 || true
+  fail "free port $METRO_PORT before flashing."
+fi
+
+step "Clear generated native and development caches"
+rm -rf ios .expo node_modules/.cache
+rm -rf "${TMPDIR:-/tmp}"/metro-* "${TMPDIR:-/tmp}"/haste-map-* 2>/dev/null || true
+if [[ -d "$HOME/Library/Developer/Xcode/DerivedData" ]]; then
+  find "$HOME/Library/Developer/Xcode/DerivedData" \
+    -maxdepth 1 -type d -name 'Rechibox-*' -exec rm -rf {} + 2>/dev/null || true
+fi
+if command -v watchman >/dev/null 2>&1; then
+  watchman watch-del-all >/dev/null 2>&1 || true
+fi
+
+echo "Caches cleared. The ignored ios/ project will be regenerated from app.json/config plugins."
+
+step "Build, install and launch on the real iPhone"
+echo "This is the hard path. For normal iterations use: npm run iphone:native"
+exec bash ./bin/run-native-iphone
