@@ -4,10 +4,12 @@
   },
   "build": {
     "preview": {
+      "node": "22.23.1",
       "distribution": "internal",
       "channel": "preview"
     },
     "production": {
+      "node": "22.23.1",
       "channel": "production",
       "autoIncrement": true
     }
