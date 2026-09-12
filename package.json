@@ -31,6 +31,11 @@
     "typecheck": "tsc --noEmit",
     "android": "expo start --android",
     "ios": "expo start --ios",
+    "device": "bash ./bin/run-on-real-device",
+    "device:check": "bash ./bin/run-on-real-device --check",
+    "device:ios": "bash ./bin/run-on-real-device ios",
+    "device:android": "bash ./bin/run-on-real-device android",
+    "iphone": "bash ./bin/run-on-real-device ios",
     "web": "expo start --web",
     "lint": "expo lint"
   },
