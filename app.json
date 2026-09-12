@@ -22,7 +22,11 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.CAMERA"
+      ]
     },
     "web": {
       "output": "static",
@@ -61,6 +65,16 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "df1ebcfe-c81a-4156-b42d-08a094f1cc71"
+      }
+    },
+    "owner": "seracuza",
+    "updates": {
+      "url": "https://u.expo.dev/df1ebcfe-c81a-4156-b42d-08a094f1cc71"
     }
   }
 }
