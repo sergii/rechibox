@@ -13,18 +13,26 @@ fi
 echo "==> Ensuring expo-updates is installed"
 if ! node -e "const p=require('./package.json'); process.exit(p.dependencies?.['expo-updates'] ? 0 : 1)"; then
   npx expo install expo-updates
+else
+  echo "expo-updates is already installed."
 fi
 
-echo "==> Initializing EAS project"
-npx eas-cli@latest init
+if node -e "const a=require('./app.json').expo; process.exit(a?.extra?.eas?.projectId ? 0 : 1)"; then
+  echo "==> EAS project is already linked"
+else
+  echo "==> Initializing EAS project"
+  npx eas-cli@latest init
+fi
 
-echo "==> Configuring EAS Update"
-npx eas-cli@latest update:configure
+if node -e "const a=require('./app.json').expo; process.exit(a?.updates?.url ? 0 : 1)"; then
+  echo "==> EAS Update is already configured"
+else
+  echo "==> Configuring EAS Update"
+  npx eas-cli@latest update:configure
+fi
 
 echo "==> Verifying local EAS configuration"
 bash ./bin/check-eas-readiness
 
 echo
 echo "EAS bootstrap completed."
-echo "Review the generated changes with: git status && git diff"
-echo "Then commit and push them before creating a cloud build."
