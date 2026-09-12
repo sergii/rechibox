@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+
+echo "==> Checking Expo authentication"
+if ! npx eas-cli@latest whoami >/dev/null 2>&1; then
+  echo "No active Expo session. Starting interactive login..."
+  npx eas-cli@latest login
+fi
+
+echo "==> Ensuring expo-updates is installed"
+if ! node -e "const p=require('./package.json'); process.exit(p.dependencies?.['expo-updates'] ? 0 : 1)"; then
+  npx expo install expo-updates
+fi
+
+echo "==> Initializing EAS project"
+npx eas-cli@latest init
+
+echo "==> Configuring EAS Update"
+npx eas-cli@latest update:configure
+
+echo "==> Verifying local EAS configuration"
+bash ./bin/check-eas-readiness
+
+echo
+echo "EAS bootstrap completed."
+echo "Review the generated changes with: git status && git diff"
+echo "Then commit and push them before creating a cloud build."
