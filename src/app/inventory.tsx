@@ -18,26 +18,38 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import {
-  createMockRecognitionItems,
-  MOCK_AI_NOTICE,
-  type MockRecognitionItem,
-} from '@/inventory/mock-recognition';
+import type { InventoryRecognitionItem } from '@/inventory/inventory-detection';
+import { useInventoryDetector } from '@/inventory/use-inventory-detector';
 
 type InventoryStage = 'camera' | 'preview' | 'recognizing' | 'review' | 'confirmed';
+
+type ImageSize = {
+  width: number;
+  height: number;
+};
+
+const LOCAL_AI_NOTICE =
+  'Розпізнавання виконується локально на пристрої: фото не надсилається на сервер. Поточна модель знає 80 загальних COCO-категорій і ще не є спеціалізованою моделлю Rechibox.';
+
+function percent(value: number, total: number): `${number}%` {
+  const normalized = total > 0 ? (value / total) * 100 : 0;
+  return `${Math.max(0, Math.min(100, normalized))}%`;
+}
 
 export default function InventoryScreen() {
   const { colors } = useTheme();
   const [permission, requestPermission, refreshPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
-  const recognitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [appState, setAppState] = useState(AppState.currentState);
   const [stage, setStage] = useState<InventoryStage>('camera');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
-  const [items, setItems] = useState<MockRecognitionItem[]>([]);
+  const [items, setItems] = useState<InventoryRecognitionItem[]>([]);
+  const [imageSize, setImageSize] = useState<ImageSize | null>(null);
+  const [inferenceMs, setInferenceMs] = useState<number | null>(null);
   const [cameraReady, setCameraReady] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const detector = useInventoryDetector(photoUri);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
@@ -54,14 +66,6 @@ export default function InventoryScreen() {
 
     return () => subscription.remove();
   }, [refreshPermission]);
-
-  useEffect(() => {
-    return () => {
-      if (recognitionTimerRef.current) {
-        clearTimeout(recognitionTimerRef.current);
-      }
-    };
-  }, []);
 
   async function handleRequestPermission() {
     setMessage(null);
@@ -101,6 +105,9 @@ export default function InventoryScreen() {
       }
 
       setPhotoUri(photo.uri);
+      setItems([]);
+      setImageSize(null);
+      setInferenceMs(null);
       setStage('preview');
       setCameraReady(false);
     } catch {
@@ -113,29 +120,40 @@ export default function InventoryScreen() {
   function handleRetake() {
     setPhotoUri(null);
     setItems([]);
+    setImageSize(null);
+    setInferenceMs(null);
     setMessage(null);
     setCameraReady(false);
     setStage('camera');
   }
 
-  function handleRecognize() {
-    if (!photoUri) {
+  async function handleRecognize() {
+    if (!photoUri || !detector.isReady) {
       return;
     }
 
     setMessage(null);
     setStage('recognizing');
 
-    recognitionTimerRef.current = setTimeout(() => {
-      setItems(createMockRecognitionItems());
+    try {
+      const result = await detector.recognize();
+      setItems(result.items);
+      setImageSize({ width: result.imageWidth, height: result.imageHeight });
+      setInferenceMs(result.inferenceMs);
       setStage('review');
-      recognitionTimerRef.current = null;
-    }, 650);
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? `Не вдалося виконати локальне AI-розпізнавання: ${error.message}`
+          : 'Не вдалося виконати локальне AI-розпізнавання.'
+      );
+      setStage('preview');
+    }
   }
 
   function updateItem(
     id: string,
-    patch: Partial<Pick<MockRecognitionItem, 'name' | 'included'>>
+    patch: Partial<Pick<InventoryRecognitionItem, 'name' | 'included'>>
   ) {
     setItems((current) =>
       current.map((item) => (item.id === id ? { ...item, ...patch } : item))
@@ -145,6 +163,8 @@ export default function InventoryScreen() {
   function handleStartOver() {
     setPhotoUri(null);
     setItems([]);
+    setImageSize(null);
+    setInferenceMs(null);
     setMessage(null);
     setCameraReady(false);
     setStage('camera');
@@ -181,7 +201,7 @@ export default function InventoryScreen() {
             Rechibox використовує камеру лише тоді, коли ви відкриваєте цей сценарій і робите фото речей.
           </Text>
           <Text style={[styles.note, { color: colors.text }]}>
-            У цій демо-версії фото не завантажується на сервер і не зберігається після завершення локального сеансу.
+            Фото обробляється локально на пристрої та не надсилається на сервер для розпізнавання.
           </Text>
           {message ? (
             <Text accessibilityLiveRegion="polite" style={[styles.error, { color: colors.text }]}>
@@ -221,7 +241,7 @@ export default function InventoryScreen() {
                 Сфотографуйте речі
               </Text>
               <Text style={[styles.body, { color: colors.text }]}>
-                Покладіть кілька речей у кадр. Після фото ви зможете перевірити результат перед підтвердженням.
+                Покладіть кілька речей у кадр. Після фото локальний AI знайде знайомі йому категорії, а ви перевірите результат.
               </Text>
 
               <View style={[styles.cameraFrame, { backgroundColor: colors.card }]}>
@@ -254,7 +274,7 @@ export default function InventoryScreen() {
                 ) : null}
               </View>
 
-              <Text style={[styles.note, { color: colors.text }]}>{MOCK_AI_NOTICE}</Text>
+              <Text style={[styles.note, { color: colors.text }]}>{LOCAL_AI_NOTICE}</Text>
               {message ? (
                 <Text accessibilityLiveRegion="polite" style={[styles.error, { color: colors.text }]}>
                   {message}
@@ -297,19 +317,49 @@ export default function InventoryScreen() {
                 <Image
                   accessibilityLabel="Фото речей для інвентарю"
                   accessibilityRole="image"
+                  resizeMode="contain"
                   source={{ uri: photoUri }}
                   style={[styles.photo, { backgroundColor: colors.card }]}
                 />
-                <Text style={[styles.note, { color: colors.text }]}>{MOCK_AI_NOTICE}</Text>
+                <Text style={[styles.note, { color: colors.text }]}>{LOCAL_AI_NOTICE}</Text>
+
+                {detector.error ? (
+                  <Text accessibilityLiveRegion="polite" style={[styles.error, { color: colors.text }]}>
+                    Не вдалося підготувати локальний AI: {detector.error.message}
+                  </Text>
+                ) : !detector.isReady ? (
+                  <View style={styles.inlineStatus}>
+                    <ActivityIndicator />
+                    <Text style={[styles.note, { color: colors.text }]}>
+                      {Platform.OS === 'web'
+                        ? 'Локальний AI доступний у нативному development build.'
+                        : detector.photoReady
+                          ? 'Готуємо локальну AI-модель…'
+                          : 'Готуємо фото для локального AI…'}
+                    </Text>
+                  </View>
+                ) : null}
+
+                {message ? (
+                  <Text accessibilityLiveRegion="polite" style={[styles.error, { color: colors.text }]}>
+                    {message}
+                  </Text>
+                ) : null}
+
                 <Pressable
                   accessibilityRole="button"
-                  onPress={handleRecognize}
+                  accessibilityState={{ disabled: !detector.isReady }}
+                  disabled={!detector.isReady}
+                  onPress={() => void handleRecognize()}
                   style={({ pressed }) => [
                     styles.primaryButton,
-                    { backgroundColor: colors.text, opacity: pressed ? 0.75 : 1 },
+                    {
+                      backgroundColor: colors.text,
+                      opacity: !detector.isReady ? 0.4 : pressed ? 0.75 : 1,
+                    },
                   ]}>
                   <Text style={[styles.primaryButtonText, { color: colors.background }]}>
-                    Розпізнати речі
+                    {detector.isReady ? 'Розпізнати речі локально' : 'Готуємо AI…'}
                   </Text>
                 </Pressable>
                 <Pressable
@@ -328,9 +378,9 @@ export default function InventoryScreen() {
               <View style={styles.centeredState}>
                 <ActivityIndicator />
                 <Text accessibilityLiveRegion="polite" style={[styles.body, { color: colors.text }]}>
-                  Готуємо демо-результат…
+                  Розпізнаємо речі на цьому пристрої…
                 </Text>
-                <Text style={[styles.note, { color: colors.text }]}>{MOCK_AI_NOTICE}</Text>
+                <Text style={[styles.note, { color: colors.text }]}>{LOCAL_AI_NOTICE}</Text>
               </View>
             ) : null}
 
@@ -340,9 +390,64 @@ export default function InventoryScreen() {
                   Перевірте розпізнані речі
                 </Text>
                 <Text style={[styles.body, { color: colors.text }]}>
-                  Виправте назви або вимкніть речі, які не потрібно додавати.
+                  Рамки та confidence нижче — реальний результат локальної моделі. Виправте назви або вимкніть зайве.
                 </Text>
-                <Text style={[styles.note, { color: colors.text }]}>{MOCK_AI_NOTICE}</Text>
+
+                {photoUri && imageSize ? (
+                  <View
+                    style={[
+                      styles.detectionPhoto,
+                      {
+                        aspectRatio: imageSize.width / imageSize.height,
+                        backgroundColor: colors.card,
+                      },
+                    ]}>
+                    <Image
+                      accessibilityLabel="Фото з результатами локального розпізнавання"
+                      accessibilityRole="image"
+                      resizeMode="contain"
+                      source={{ uri: photoUri }}
+                      style={StyleSheet.absoluteFill}
+                    />
+                    {items.map((item) => (
+                      <View
+                        key={`box-${item.id}`}
+                        pointerEvents="none"
+                        style={[
+                          styles.detectionBox,
+                          {
+                            borderColor: item.included ? colors.text : colors.border,
+                            left: percent(item.box.xmin, imageSize.width),
+                            top: percent(item.box.ymin, imageSize.height),
+                            width: percent(item.box.xmax - item.box.xmin, imageSize.width),
+                            height: percent(item.box.ymax - item.box.ymin, imageSize.height),
+                            opacity: item.included ? 1 : 0.45,
+                          },
+                        ]}>
+                        <Text
+                          numberOfLines={1}
+                          style={[
+                            styles.detectionLabel,
+                            { color: colors.background, backgroundColor: colors.text },
+                          ]}>
+                          {item.name} · {Math.round(item.confidence * 100)}%
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+
+                <Text style={[styles.note, { color: colors.text }]}>
+                  {inferenceMs === null
+                    ? LOCAL_AI_NOTICE
+                    : `Локальний inference: ${inferenceMs} мс. ${LOCAL_AI_NOTICE}`}
+                </Text>
+
+                {items.length === 0 ? (
+                  <Text accessibilityLiveRegion="polite" style={[styles.error, { color: colors.text }]}>
+                    Модель не знайшла підтримуваних обʼєктів на цьому фото. Спробуйте інший ракурс або інші речі.
+                  </Text>
+                ) : null}
 
                 {items.map((item) => {
                   const confidencePercent = Math.round(item.confidence * 100);
@@ -379,8 +484,8 @@ export default function InventoryScreen() {
                         />
                       </View>
                       <View style={styles.itemMetaRow}>
-                        <Text style={[styles.confidence, { color: colors.text }]}>
-                          {confidencePercent}% впевненість
+                        <Text style={[styles.confidence, { color: colors.text }]}>                          
+                          {confidencePercent}% впевненість · {item.sourceLabel}
                         </Text>
                         {isUncertain ? (
                           <Text style={[styles.uncertain, { color: colors.text }]}>Перевірте назву</Text>
@@ -429,7 +534,7 @@ export default function InventoryScreen() {
                   Інвентар підтверджено локально
                 </Text>
                 <Text accessibilityLiveRegion="polite" style={[styles.body, { color: colors.text }]}>
-                  Це демонстраційний результат. Дані не відправлені в backend і не збережені після цього сеансу.
+                  Це реальний результат on-device detector-а, який ви перевірили вручну. Дані поки не відправляються в backend і не зберігаються після цього сеансу.
                 </Text>
                 <View
                   style={[
@@ -477,6 +582,7 @@ const styles = StyleSheet.create({
   body: { fontSize: 16, lineHeight: 24 },
   note: { fontSize: 14, lineHeight: 21 },
   error: { fontSize: 14, lineHeight: 21, fontWeight: '600' },
+  inlineStatus: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   centeredState: {
     flexGrow: 1,
     minHeight: 260,
@@ -531,6 +637,29 @@ const styles = StyleSheet.create({
     width: '100%',
     aspectRatio: 3 / 4,
     borderRadius: 20,
+  },
+  detectionPhoto: {
+    position: 'relative',
+    width: '100%',
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  detectionBox: {
+    position: 'absolute',
+    borderWidth: 2,
+    borderRadius: 8,
+  },
+  detectionLabel: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    maxWidth: 180,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderBottomRightRadius: 6,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '700',
   },
   primaryButton: {
     minHeight: 52,
