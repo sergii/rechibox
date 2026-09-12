@@ -1,0 +1,64 @@
+name: EAS PR Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Check EAS readiness
+        id: readiness
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          ready=true
+
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "PR preview skipped: EXPO_TOKEN is not available."
+            ready=false
+          fi
+
+          if ! node -e "const p=require('./package.json'); process.exit(p.dependencies?.['expo-updates'] ? 0 : 1)"; then
+            echo "PR preview skipped: expo-updates is not installed yet."
+            ready=false
+          fi
+
+          if ! node -e "const a=require('./app.json').expo; process.exit(a?.updates?.url && a?.extra?.eas?.projectId ? 0 : 1)"; then
+            echo "PR preview skipped: Expo project is not configured yet."
+            ready=false
+          fi
+
+          echo "ready=$ready" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node
+        if: steps.readiness.outputs.ready == 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Setup EAS
+        if: steps.readiness.outputs.ready == 'true'
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        if: steps.readiness.outputs.ready == 'true'
+        run: npm ci
+
+      - name: Publish PR preview
+        if: steps.readiness.outputs.ready == 'true'
+        uses: expo/expo-github-action/preview@v8
+        with:
+          command: eas update --auto
