@@ -19,7 +19,7 @@ if [[ "$ACTUAL_NODE" != "$EXPECTED_NODE" || "$ACTUAL_NPM" != "$EXPECTED_NPM" ]];
   exit 1
 fi
 
-for command in xcodebuild xcrun security ruby; do
+for command in xcodebuild xcrun security ruby curl; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "Missing required command: $command" >&2
     exit 1
@@ -40,6 +40,7 @@ fi
 
 TMP_DIR="$(mktemp -d)"
 RESTORE_PACKAGE_FILES=0
+METRO_PID=""
 cleanup() {
   if [[ "$RESTORE_PACKAGE_FILES" -eq 1 ]]; then
     cp "$TMP_DIR/package.json" package.json
@@ -47,9 +48,12 @@ cleanup() {
       cp "$TMP_DIR/package-lock.json" package-lock.json
     fi
   fi
+  if [[ -n "$METRO_PID" ]] && kill -0 "$METRO_PID" 2>/dev/null; then
+    kill "$METRO_PID" 2>/dev/null || true
+  fi
   rm -rf "$TMP_DIR"
 }
-trap cleanup EXIT
+trap cleanup EXIT INT TERM
 
 DEVICES_JSON="$TMP_DIR/devices.json"
 if ! xcrun devicectl list devices --json-output "$DEVICES_JSON" --timeout 5 >/dev/null 2>&1; then
@@ -128,23 +132,70 @@ else
   echo "Using existing ios/Pods and Podfile.lock."
 fi
 
+METRO_PORT="${RCT_METRO_PORT:-8081}"
+METRO_STATUS_URL="http://127.0.0.1:${METRO_PORT}/status"
+METRO_STATUS="$(curl --silent --max-time 1 "$METRO_STATUS_URL" 2>/dev/null || true)"
+
+if [[ "$METRO_STATUS" == *"packager-status:running"* ]]; then
+  echo "Reusing Metro already running on port $METRO_PORT."
+else
+  if lsof -nP -iTCP:"$METRO_PORT" -sTCP:LISTEN >/dev/null 2>&1; then
+    echo "Port $METRO_PORT is occupied, but it is not responding as Metro." >&2
+    echo "Stop the process using port $METRO_PORT, then retry." >&2
+    lsof -nP -iTCP:"$METRO_PORT" -sTCP:LISTEN >&2 || true
+    exit 1
+  fi
+
+  echo "Starting Metro on port $METRO_PORT for the native iPhone app."
+  echo "The iPhone must be able to reach this Mac on the LAN; if the phone shows LTE only, enable Wi-Fi and join the same network as the Mac."
+  RCT_METRO_PORT="$METRO_PORT" npx expo start --host lan --port "$METRO_PORT" < /dev/null &
+  METRO_PID=$!
+
+  for _ in {1..40}; do
+    METRO_STATUS="$(curl --silent --max-time 1 "$METRO_STATUS_URL" 2>/dev/null || true)"
+    if [[ "$METRO_STATUS" == *"packager-status:running"* ]]; then
+      break
+    fi
+    if ! kill -0 "$METRO_PID" 2>/dev/null; then
+      echo "Metro exited before becoming ready." >&2
+      wait "$METRO_PID" || true
+      exit 1
+    fi
+    sleep 0.5
+  done
+
+  if [[ "$METRO_STATUS" != *"packager-status:running"* ]]; then
+    echo "Metro did not become ready on port $METRO_PORT." >&2
+    exit 1
+  fi
+  echo "Metro is ready on port $METRO_PORT."
+fi
+
+echo
 if [[ "$DEVICE_COUNT" -gt 1 ]]; then
   echo "Multiple physical Apple devices are available; Expo will ask which one to use."
   echo
-  exec npx expo run:ios --device --no-install
+  RCT_METRO_PORT="$METRO_PORT" npx expo run:ios --device --no-install --no-bundler
+else
+  FIRST_DEVICE="$(printf '%s\n' "$DEVICE_LINES" | head -n 1)"
+  IFS=$'\t' read -r DEVICE_UDID DEVICE_NAME DEVICE_MODEL DEVICE_TRANSPORT <<< "$FIRST_DEVICE"
+
+  if [[ -z "$DEVICE_UDID" ]]; then
+    echo "Could not resolve the hardware UDID for the available iPhone/iPad." >&2
+    exit 1
+  fi
+
+  echo "Building, installing, and launching on: $DEVICE_NAME ($DEVICE_MODEL)"
+  echo "Expo target UDID: $DEVICE_UDID"
+  echo "Connection: $DEVICE_TRANSPORT"
+  echo "Metro: port $METRO_PORT (managed separately from the native build)"
+  echo "Generated ios/ output remains ignored; app.json/config plugins stay the source of truth."
+  echo
+  RCT_METRO_PORT="$METRO_PORT" npx expo run:ios --device "$DEVICE_UDID" --no-install --no-bundler
 fi
 
-FIRST_DEVICE="$(printf '%s\n' "$DEVICE_LINES" | head -n 1)"
-IFS=$'\t' read -r DEVICE_UDID DEVICE_NAME DEVICE_MODEL DEVICE_TRANSPORT <<< "$FIRST_DEVICE"
-
-if [[ -z "$DEVICE_UDID" ]]; then
-  echo "Could not resolve the hardware UDID for the available iPhone/iPad." >&2
-  exit 1
+if [[ -n "$METRO_PID" ]]; then
+  echo
+  echo "Rechibox is installed and launched. Metro will stay running in this terminal; press Ctrl-C when finished."
+  wait "$METRO_PID"
 fi
-
-echo "Building, installing, and launching on: $DEVICE_NAME ($DEVICE_MODEL)"
-echo "Expo target UDID: $DEVICE_UDID"
-echo "Connection: $DEVICE_TRANSPORT"
-echo "Generated ios/ output remains ignored; app.json/config plugins stay the source of truth."
-echo
-exec npx expo run:ios --device "$DEVICE_UDID" --no-install
