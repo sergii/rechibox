@@ -43,15 +43,29 @@ if [[ "$CHECK_ONLY" -eq 0 ]] && { [[ "$ACTUAL_NODE" != "$EXPECTED_NODE" ]] || [[
 fi
 
 IOS_DEVICES=""
+IOS_PAIRED_DEVICES=""
+IOS_DETECTION_SOURCE=""
 IOS_USB_EVIDENCE=0
-if [[ "$(uname -s)" == "Darwin" ]]; then
-  if command -v xcrun >/dev/null 2>&1; then
-    IOS_RAW="$(xcrun xctrace list devices 2>/dev/null || true)"
-    IOS_DEVICES="$(printf '%s\n' "$IOS_RAW" | awk '
+if [[ "$(uname -s)" == "Darwin" && -x "$(command -v xcrun 2>/dev/null || true)" ]]; then
+  DEVICETCL_RAW="$(xcrun devicectl list devices 2>/dev/null || true)"
+  if [[ -n "$DEVICETCL_RAW" ]]; then
+    IOS_PAIRED_DEVICES="$(printf '%s\n' "$DEVICETCL_RAW" | awk '/iPhone|iPad/ { print }')"
+    IOS_DEVICES="$(printf '%s\n' "$DEVICETCL_RAW" | awk '/iPhone|iPad/ && /available/ { print }')"
+    IOS_DETECTION_SOURCE="devicectl/CoreDevice"
+  fi
+
+  if [[ -z "$IOS_DEVICES" ]]; then
+    XCTRACE_RAW="$(xcrun xctrace list devices 2>/dev/null || true)"
+    XCTRACE_DEVICES="$(printf '%s\n' "$XCTRACE_RAW" | awk '
       /^== Devices ==/ { in_devices = 1; next }
+      /^== Devices Offline ==/ { in_devices = 0 }
       /^== Simulators ==/ { in_devices = 0 }
       in_devices && /(iPhone|iPad)/ { print }
     ')"
+    if [[ -n "$XCTRACE_DEVICES" ]]; then
+      IOS_DEVICES="$XCTRACE_DEVICES"
+      IOS_DETECTION_SOURCE="xctrace fallback"
+    fi
   fi
 
   if command -v system_profiler >/dev/null 2>&1 && system_profiler SPUSBDataType 2>/dev/null | grep -Eq 'iPhone|iPad'; then
@@ -75,9 +89,13 @@ if [[ -n "$ADB" ]]; then
 fi
 
 echo
-echo "iOS/iPadOS physical devices visible to Xcode:"
+echo "iOS/iPadOS physical devices available to Xcode/CoreDevice:"
 if [[ -n "$IOS_DEVICES" ]]; then
   printf '%s\n' "$IOS_DEVICES"
+  echo "  detection source: ${IOS_DETECTION_SOURCE:-unknown}"
+elif [[ -n "$IOS_PAIRED_DEVICES" ]]; then
+  echo "  paired, but not currently available:"
+  printf '%s\n' "$IOS_PAIRED_DEVICES"
 else
   echo "  none detected"
 fi
@@ -122,6 +140,7 @@ echo
 case "$TARGET" in
   ios)
     echo "Starting Expo Go server for a physical iPhone/iPad over $CONNECTION."
+    echo "Device detection uses modern CoreDevice/devicectl when available; xctrace is only a fallback."
     echo "Cable detection is diagnostic only: Expo Go opens this project from the QR code over the network."
     echo "On iPhone/iPad, scan the QR code with the system Camera app."
     ;;
@@ -130,7 +149,7 @@ case "$TARGET" in
     echo "Open Expo Go on the phone and scan the QR code."
     ;;
   generic)
-    echo "No physical device is visible to Xcode/adb. A cable is not required for Expo Go."
+    echo "No physical device is currently available to Xcode/CoreDevice or adb. A cable is not required for Expo Go."
     echo "Starting a $CONNECTION QR anyway; keep the phone and Mac on the same network when using LAN."
     ;;
 esac
