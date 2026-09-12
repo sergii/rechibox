@@ -16,37 +16,93 @@ on:
         required: false
         default: Manual GitHub update
         type: string
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
 
 jobs:
   publish:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     steps:
-      - name: Require Expo token
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Check EAS readiness
+        id: readiness
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
+          ready=true
+
           if [ -z "$EXPO_TOKEN" ]; then
-            echo "Missing EXPO_TOKEN repository secret."
-            exit 1
+            echo "EAS publish skipped: EXPO_TOKEN is not configured yet."
+            ready=false
           fi
 
-      - name: Checkout repository
-        uses: actions/checkout@v5
+          if ! node -e "const p=require('./package.json'); process.exit(p.dependencies?.['expo-updates'] ? 0 : 1)"; then
+            echo "EAS publish skipped: expo-updates is not installed yet."
+            ready=false
+          fi
+
+          if ! node -e "const a=require('./app.json').expo; process.exit(a?.updates?.url && a?.extra?.eas?.projectId ? 0 : 1)"; then
+            echo "EAS publish skipped: Expo projectId/updates.url are not configured yet."
+            ready=false
+          fi
+
+          echo "ready=$ready" >> "$GITHUB_OUTPUT"
+
+      - name: Fail an explicit manual run when EAS is not ready
+        if: github.event_name == 'workflow_dispatch' && steps.readiness.outputs.ready != 'true'
+        run: |
+          echo "Run npm run eas:bootstrap locally and add EXPO_TOKEN to GitHub Actions secrets first."
+          exit 1
 
       - name: Setup Node
+        if: steps.readiness.outputs.ready == 'true'
         uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
           cache: npm
 
       - name: Setup EAS
+        if: steps.readiness.outputs.ready == 'true'
         uses: expo/expo-github-action@v8
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
       - name: Install dependencies
+        if: steps.readiness.outputs.ready == 'true'
         run: npm ci
 
+      - name: Verify EAS configuration
+        if: steps.readiness.outputs.ready == 'true'
+        run: npm run eas:check
+
       - name: Publish update
-        run: npx eas-cli@latest update --channel "${{ inputs.channel }}" --message "${{ inputs.message }}" --non-interactive
+        if: steps.readiness.outputs.ready == 'true'
+        env:
+          MANUAL_CHANNEL: ${{ inputs.channel }}
+          MANUAL_MESSAGE: ${{ inputs.message }}
+          UPDATE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            channel="$MANUAL_CHANNEL"
+            message="$MANUAL_MESSAGE"
+          else
+            channel="preview"
+            message="main@${UPDATE_SHA:0:7}"
+          fi
+
+          npx eas-cli@latest update \
+            --channel "$channel" \
+            --message "$message" \
+            --non-interactive
