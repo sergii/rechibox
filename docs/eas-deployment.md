@@ -2,51 +2,50 @@
 
 Rechibox uses GitHub as the source of truth and Expo Application Services for cloud builds and over-the-air updates.
 
-## One-time bootstrap
+## Recommended one-command setup
 
-Run:
+For the first setup on a Mac, use:
+
+```bash
+npm run eas:setup
+```
+
+The setup command is interactive and resumable. It will:
+
+1. Install dependencies and run typecheck/lint.
+2. Check Expo authentication, open the Expo signup page when needed, and start `eas login`.
+3. Install the SDK-compatible `expo-updates` package.
+4. Initialize/link the Expo EAS project.
+5. Configure EAS Update and verify `runtimeVersion`, `updates.url`, `projectId`, channels, and environments.
+6. Check GitHub CLI authentication and configure the `EXPO_TOKEN` Actions secret when missing.
+7. Commit and push generated EAS configuration automatically when the working tree was clean before setup.
+8. Offer to register an iPhone for ad hoc internal distribution.
+9. Offer to start the first interactive iOS preview cloud build, including Apple signing setup when required.
+
+The command can be run again safely. Steps that are already configured are skipped where possible.
+
+If you are pulling these helpers for the first time, the full copy-paste command is:
+
+```bash
+git pull --ff-only && npm run eas:setup
+```
+
+## Modular commands
+
+The individual commands remain available for troubleshooting or partial setup:
 
 ```bash
 npm run eas:bootstrap
-```
-
-The script will:
-
-1. Check Expo authentication and open `eas login` when needed.
-2. Install the SDK-compatible `expo-updates` package when it is missing.
-3. Initialize/link the Expo EAS project.
-4. Configure EAS Update.
-5. Verify `runtimeVersion`, `updates.url`, `projectId`, and the preview/production channels.
-
-After the command completes, review and commit all generated changes, including `package.json`, `package-lock.json`, and `app.json`.
-
-## GitHub token
-
-Run:
-
-```bash
 npm run eas:token
-```
-
-On macOS this opens the Expo access-token page, asks for the token with hidden terminal input, and stores it directly in GitHub Actions as the `EXPO_TOKEN` repository secret using `gh`.
-
-The token is never written to the repository.
-
-## iPhone setup
-
-If EAS does not already know the test iPhone, register it with:
-
-```bash
+npm run eas:check
+npm run eas:status
 npm run eas:device:ios
-```
-
-Prepare Apple signing credentials for the preview profile with:
-
-```bash
 npm run eas:credentials:ios
+npm run eas:build:preview:ios
+npm run eas:build:production:ios
+npm run eas:update:preview
+npm run eas:update:production
 ```
-
-These are account-level operations and can require interactive Apple authentication.
 
 ## Automated flow
 
@@ -73,26 +72,14 @@ Use the `EAS Build` workflow manually and select:
 
 The workflow queues the build in Expo and returns immediately.
 
-Equivalent local commands are available when useful:
+The first iOS preview build is intentionally interactive when run locally because Apple authentication, device registration, certificates, and ad hoc provisioning can require user action.
 
-```bash
-npm run eas:build:preview:ios
-npm run eas:build:production:ios
-```
+## EAS environments
 
-The first iOS cloud build can still require Apple signing credentials and device registration for internal distribution.
+The `preview` build profile uses the EAS `preview` environment, and the `production` build profile uses the EAS `production` environment. EAS Update commands also pass the matching `--environment` explicitly, which is required for modern Expo SDKs.
 
 ## Runtime compatibility
 
 The app uses the Expo `fingerprint` runtime version policy. JavaScript/assets can be shipped with EAS Update only when they are compatible with the installed native runtime.
 
 Changes such as adding a native library, changing ExecuTorch backends, changing native permissions, or changing native Expo modules require a new EAS Build. A mismatched update will not be delivered to an incompatible installed binary.
-
-## Useful commands
-
-```bash
-npm run eas:check
-npm run eas:status
-npm run eas:update:preview
-npm run eas:update:production
-```
