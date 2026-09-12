@@ -80,11 +80,13 @@ elif [[ -n "${ANDROID_HOME:-}" && -x "${ANDROID_HOME}/platform-tools/adb" ]]; th
   ADB="${ANDROID_HOME}/platform-tools/adb"
 fi
 
-ANDROID_DEVICES=""
+ANDROID_PHYSICAL_DEVICES=""
+ANDROID_EMULATORS=""
 ANDROID_UNAUTHORIZED=""
 if [[ -n "$ADB" ]]; then
   ANDROID_RAW="$($ADB devices -l 2>/dev/null || true)"
-  ANDROID_DEVICES="$(printf '%s\n' "$ANDROID_RAW" | awk 'NR > 1 && $2 == "device" { print }')"
+  ANDROID_PHYSICAL_DEVICES="$(printf '%s\n' "$ANDROID_RAW" | awk 'NR > 1 && $2 == "device" && $1 !~ /^emulator-/ { print }')"
+  ANDROID_EMULATORS="$(printf '%s\n' "$ANDROID_RAW" | awk 'NR > 1 && $2 == "device" && $1 ~ /^emulator-/ { print }')"
   ANDROID_UNAUTHORIZED="$(printf '%s\n' "$ANDROID_RAW" | awk 'NR > 1 && $2 == "unauthorized" { print }')"
 fi
 
@@ -107,10 +109,14 @@ fi
 
 echo
 echo "Android physical devices visible to adb:"
-if [[ -n "$ANDROID_DEVICES" ]]; then
-  printf '%s\n' "$ANDROID_DEVICES"
+if [[ -n "$ANDROID_PHYSICAL_DEVICES" ]]; then
+  printf '%s\n' "$ANDROID_PHYSICAL_DEVICES"
 else
   echo "  none detected"
+fi
+if [[ -n "$ANDROID_EMULATORS" ]]; then
+  echo "Android emulators visible to adb:"
+  printf '%s\n' "$ANDROID_EMULATORS"
 fi
 if [[ -n "$ANDROID_UNAUTHORIZED" ]]; then
   echo "  unauthorized devices:"
@@ -123,13 +129,13 @@ if [[ "$CHECK_ONLY" -eq 1 ]]; then
 fi
 
 if [[ "$TARGET" == "auto" ]]; then
-  if [[ -n "$IOS_DEVICES" && -n "$ANDROID_DEVICES" ]]; then
+  if [[ -n "$IOS_DEVICES" && -n "$ANDROID_PHYSICAL_DEVICES" ]]; then
     echo >&2
     echo "Both iOS and Android physical devices are visible. Use 'npm run iphone' or 'npm run device:android'." >&2
     exit 2
   elif [[ -n "$IOS_DEVICES" ]]; then
     TARGET="ios"
-  elif [[ -n "$ANDROID_DEVICES" ]]; then
+  elif [[ -n "$ANDROID_PHYSICAL_DEVICES" ]]; then
     TARGET="android"
   else
     TARGET="generic"

@@ -40,13 +40,29 @@ The verified bootstrap toolchain is Node 22.23.1/npm 10.9.8. create-expo-app 4.0
 | `npm start` | Start Metro; press `i` or `a` to open a simulator/emulator |
 | `npm run ios` | Start Metro and open Expo Go in the iOS simulator |
 | `npm run android` | Start Metro and open Expo Go in the Android emulator |
+| `npm run device:check` | Show available physical Apple/Android devices without starting Metro |
+| `npm run iphone` | Start an Expo Go LAN QR flow for a physical iPhone/iPad |
+| `npm run iphone:native` | Build, install, and launch a native development build on an available physical iPhone/iPad |
 | `npm run web` | Optional browser preview inherited from Expo; web is not a product target |
 | `npm run typecheck` | Run strict TypeScript without emitting files |
 | `npm run lint` | Run Expo's ESLint configuration |
 | `npx expo install --check` | Check SDK dependency compatibility |
 | `npx expo-doctor` | Check Expo project health |
 
-The native run scripts use Expo Go and do not generate native projects. Expo Go includes `expo-camera`, so the JavaScript camera flow can be exercised there. The product camera permission string lives in the `expo-camera` config plugin and is not verified by Expo Go; verify config-plugin/native output in a development build once product identifiers are available.
+`npm run iphone` is the fastest physical-device loop and uses Expo Go over the network. `npm run iphone:native` uses CNG and `expo run:ios --device`: it may generate `ios/` locally, build with Xcode, install the Rechibox binary on the selected physical device, and start Metro. Generated native directories remain ignored; `app.json` and config plugins remain the source of truth.
+
+The native development build is the relevant verification path for product-specific native configuration such as the Rechibox camera permission string. Local Apple signing credentials are not committed to the repository; Xcode uses the developer account/certificate available on the machine.
+
+## Native identity
+
+The selected application identifiers are:
+
+```text
+iOS bundle identifier: com.sergii.rechibox
+Android package:       com.sergii.rechibox
+```
+
+Changing either identifier is a product/release decision because it changes native application identity. The production domain/API URL, EAS project ID, store records, and release signing/distribution policy remain separate decisions.
 
 ## Project structure
 
@@ -63,6 +79,9 @@ src/storage/
   mock-options.ts       Clearly labeled local fixtures for the storage slice
 src/components/
   RechiboxLogo.tsx     Branded SVG logo component
+bin/
+  run-on-real-device   Physical-device diagnostics + Expo Go runner
+  run-native-iphone    Physical iPhone native build/install runner
 assets/
   expo.icon/           Generated iOS icon placeholder
   images/              Generated app icon, splash, and favicon placeholders
@@ -121,7 +140,7 @@ The config plugin disables Android audio recording permission and barcode-scanne
 
 ## Deferred decisions
 
-Only display name **Rechibox**, slug **rechibox**, and URL scheme **rechibox** are configured. Apple bundle identifier, Android package identifier, production domain/API URL, EAS project ID, and signing configuration are unset.
+Display name **Rechibox**, slug **rechibox**, URL scheme **rechibox**, iOS bundle identifier **com.sergii.rechibox**, and Android package **com.sergii.rechibox** are configured. Production domain/API URL, EAS project ID, App Store / Play Store records, and release signing/distribution policy remain unset.
 
 Backend, accounts/authentication, real booking, real AI recognition/model selection, image upload/storage, persistent inventory, offline sync, state/query libraries, UI frameworks, analytics, and build/release/OTA policies await concrete product requirements. The storage slice uses fictional local fixtures. The AI inventory slice uses a captured cache image plus fixed recognition fixtures and local React state only. There is no automated test suite yet; the app is checked with TypeScript, lint, Expo diagnostics, and runtime inspection.
 
@@ -131,10 +150,10 @@ Verified on 2026-09-12:
 
 - `npm run typecheck`, `npm run lint`, and `git diff --check` passed.
 - `npx expo install --check` reported compatible dependencies; `npx expo-doctor` passed all 21 checks.
-- `npx expo config --type public` confirmed the safe identity and absence of bundle/package IDs, production endpoints, and EAS project configuration.
+- At bootstrap, before native product identifiers were selected, `npx expo config --type public` confirmed the safe display identity and absence of bundle/package IDs, production endpoints, and EAS project configuration.
 - Expo Go loaded the home route on an iPhone 17 Pro simulator (iOS 26.5) and the existing Pixel 8 Android emulator. Both native Metro bundles succeeded. The home text was verified through accessibility inspection and screenshots in light and dark appearance, including status bars and safe-area layout. Expo's floating developer button is runtime UI, not part of Rechibox.
 
-This verifies the JavaScript app in Expo Go. A custom native binary, native registration of `rechibox://`, app icons/splash configuration, signing, store builds, physical devices, and release behavior have not been verified.
+This bootstrap verification covered the JavaScript app in Expo Go. Store signing, distribution, release behavior, and production native assets remain unverified.
 
 ## Storage slice verification
 
@@ -146,7 +165,9 @@ Verified on 2026-09-12 in Expo Go:
 
 ## AI inventory verification status
 
-Implementation is committed, but the completed camera slice has not yet been runtime-verified after the code change. Verification should include a physical device because camera-critical behavior is material:
+Implementation is committed, but the completed camera slice has not yet been runtime-verified after the code change. Verification should include a physical device because camera-critical behavior is material. `npm run iphone:native` now provides the native iOS path needed to verify config-plugin output as well as the JavaScript flow.
+
+Verify:
 
 - permission grant, denial, and return from system settings;
 - camera ready, capture, preview, and retake;

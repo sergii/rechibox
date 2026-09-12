@@ -36,6 +36,7 @@
     "device:ios": "bash ./bin/run-on-real-device ios",
     "device:android": "bash ./bin/run-on-real-device android",
     "iphone": "bash ./bin/run-on-real-device ios",
+    "iphone:native": "bash ./bin/run-native-iphone",
     "web": "expo start --web",
     "lint": "expo lint"
   },

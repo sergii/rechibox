@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+if [[ "$(uname -s)" != "Darwin" ]]; then
+  echo "Native iPhone builds require macOS with Xcode." >&2
+  exit 1
+fi
+
+EXPECTED_NODE="$(tr -d 'v[:space:]' < .nvmrc)"
+EXPECTED_NPM="$(sed -n 's/.*"packageManager": "npm@\([^"]*\)".*/\1/p' package.json)"
+ACTUAL_NODE="$(node -v 2>/dev/null | sed 's/^v//' || true)"
+ACTUAL_NPM="$(npm -v 2>/dev/null || true)"
+
+if [[ "$ACTUAL_NODE" != "$EXPECTED_NODE" || "$ACTUAL_NPM" != "$EXPECTED_NPM" ]]; then
+  echo "Expected Node $EXPECTED_NODE / npm $EXPECTED_NPM; found Node ${ACTUAL_NODE:-missing} / npm ${ACTUAL_NPM:-missing}." >&2
+  exit 1
+fi
+
+for command in xcodebuild xcrun security; do
+  if ! command -v "$command" >/dev/null 2>&1; then
+    echo "Missing required command: $command" >&2
+    exit 1
+  fi
+done
+
+SIGNING_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk '/"Apple Development:/ { print; exit }')"
+if [[ -z "$SIGNING_IDENTITY" ]]; then
+  echo "No valid Apple Development signing identity was found in the login keychain." >&2
+  exit 1
+fi
+
+BUNDLE_ID="$(node -e "const app=require('./app.json'); process.stdout.write(app.expo?.ios?.bundleIdentifier || '')")"
+if [[ -z "$BUNDLE_ID" ]]; then
+  echo "app.json does not define expo.ios.bundleIdentifier." >&2
+  exit 1
+fi
+
+DEVICES_RAW="$(xcrun devicectl list devices 2>/dev/null || true)"
+AVAILABLE_LINES="$(printf '%s\n' "$DEVICES_RAW" | awk '/iPhone|iPad/ && /available/ { print }')"
+DEVICE_COUNT="$(printf '%s\n' "$AVAILABLE_LINES" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')"
+
+if [[ "$DEVICE_COUNT" == "0" ]]; then
+  echo "No available physical iPhone/iPad was found by CoreDevice." >&2
+  echo "Unlock and pair the device, enable Developer Mode if required, then run 'npm run device:check'." >&2
+  exit 1
+fi
+
+echo "Rechibox native iPhone runner"
+echo "Bundle identifier: $BUNDLE_ID"
+echo "Signing identity: $SIGNING_IDENTITY"
+echo
+echo "Available physical Apple devices:"
+printf '%s\n' "$AVAILABLE_LINES"
+echo
+
+if [[ "$DEVICE_COUNT" -gt 1 ]]; then
+  echo "Multiple physical Apple devices are available; Expo will ask which one to use."
+  exec npx expo run:ios --device
+fi
+
+DEVICE_NAME="$(printf '%s\n' "$AVAILABLE_LINES" | sed -E 's/[[:space:]]{2,}/|/g' | cut -d '|' -f 1 | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+
+if [[ -z "$DEVICE_NAME" ]]; then
+  echo "Could not parse the available device name; falling back to Expo's device selector."
+  exec npx expo run:ios --device
+fi
+
+echo "Building, installing, and launching on: $DEVICE_NAME"
+echo "CNG may generate ios/ locally; it remains ignored and app.json/config plugins stay the source of truth."
+echo
+exec npx expo run:ios --device "$DEVICE_NAME"

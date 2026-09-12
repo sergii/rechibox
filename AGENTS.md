@@ -36,14 +36,17 @@ start: npm start
 typecheck: npm run typecheck
 lint: npm run lint
 test: none (no automated test suite yet)
-ios: npm run ios
-android: npm run android
+ios simulator / Expo Go: npm run ios
+android emulator / Expo Go: npm run android
+physical-device diagnostics: npm run device:check
+physical iPhone / Expo Go: npm run iphone
+physical iPhone native build: npm run iphone:native
 web: npm run web (optional preview, not a product target)
 dependency compatibility: npx expo install --check
 project diagnostics: npx expo-doctor
 ```
 
-`ios` and `android` start Metro and open Expo Go; they do not build a native binary. Use a development build when product-specific native capabilities need verification. Do not generate app identifiers to make a native build proceed.
+`ios`, `android`, and `iphone` use Expo Go and do not build a product-specific native binary. `iphone:native` uses CNG plus `expo run:ios --device`; it may generate ignored `ios/` output locally, build with Xcode, install the app on a physical device, and verify native/config-plugin behavior. Local Apple signing credentials remain machine-local and must not be committed.
 
 ## Always follow
 
@@ -72,11 +75,12 @@ Do not load every shared document for every small task. Read product/domain docu
 - Check dependency and peer-dependency requirements before cleanup. SDK 57's Router brings `@expo/ui`, glass/symbol helpers, and drawer/gesture/animation dependencies transitively; their installation is not adoption of their APIs by this product.
 - The headerless home screen owns all four safe-area edges through `react-native-safe-area-context`; Expo Router provides the safe-area context. Routed screens with a native stack header should own only the remaining safe-area edges. Keep text scalable and system bars legible in light and dark appearance.
 - `app.json` and config plugins are the native source of truth. Keep generated `ios/` and `android/` out of source control; do not leave persistent changes only in generated native files.
-- Safe identity is display name `Rechibox`, slug `rechibox`, scheme `rechibox`. Apple bundle ID, Android package ID, production domain/API URL, EAS project ID, and signing configuration remain unset until provided.
+- Native identity is display name `Rechibox`, slug `rechibox`, scheme `rechibox`, iOS bundle identifier `com.sergii.rechibox`, and Android package `com.sergii.rechibox`. Do not change bundle/package identifiers casually: changing them changes application identity. Production domain/API URL, EAS project ID, store records, and release signing/distribution policy remain unset until explicitly decided.
+- Do not commit developer certificates, provisioning profiles, keychain data, Apple credentials, device IDs, or machine-specific Xcode signing state. Native development builds may use locally available Xcode automatic signing.
 - `expo-camera` is the product-owned camera dependency for the `/inventory` slice. The camera config plugin owns the product camera permission string; audio recording and barcode scanning are not part of this slice.
 - Only mount the live camera while the inventory flow needs it and the application is active. Re-check camera permission after returning to the foreground, and model denied permission, camera mount failure, capture failure, and retry states explicitly.
 - The current AI recognition step is intentionally a fixed local mock. It must be labeled as mock in the UI and docs, must not claim that the photo was analyzed, and must not imply upload, backend persistence, or real model inference.
 - Recognition confidence and low-confidence correction are part of the current inventory interaction shape. User confirmation is local demo state only and does not mutate backend/domain state.
 - Expo icons/splash assets remain development placeholders. Real AI recognition, backend contracts, accounts, persistent inventory, offline sync, and release policy remain deferred.
 - Keep code comments in English. Do not infer booking/resource models or claim offline synchronization before product requirements define them.
-- Run strict TypeScript, lint, and relevant Expo checks. Inspect the running app on targeted platforms and state verification limits honestly. Camera-critical behavior should be exercised on a physical device. Expo Go can verify the JavaScript camera flow but does not verify product config-plugin output, native identity, signing, or release behavior.
+- Run strict TypeScript, lint, and relevant Expo checks. Inspect the running app on targeted platforms and state verification limits honestly. Camera-critical behavior should be exercised on a physical device. Expo Go can verify the JavaScript camera flow; use the native physical-device runner when config-plugin/native behavior matters.
