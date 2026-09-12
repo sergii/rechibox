@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+MODEL_DIR="$ROOT_DIR/assets/models"
+MODEL_FILE="$MODEL_DIR/ssdlite320_mobilenet_v3_large_xnnpack_fp32.pte"
+MODEL_URL="https://huggingface.co/software-mansion/react-native-executorch-ssdlite320-mobilenet-v3-large/resolve/v0.10.0/xnnpack/ssdlite320_mobilenet_v3_large_xnnpack_fp32.pte"
+
+mkdir -p "$MODEL_DIR"
+
+if [[ -f "$MODEL_FILE" ]]; then
+  echo "Model already present: $MODEL_FILE"
+  ls -lh "$MODEL_FILE"
+  exit 0
+fi
+
+echo "Downloading pinned SSDLite320 MobileNetV3 XNNPACK model..."
+echo "Source: $MODEL_URL"
+
+TMP_FILE="$MODEL_FILE.partial"
+rm -f "$TMP_FILE"
+curl --fail --location --retry 3 --retry-delay 1 --output "$TMP_FILE" "$MODEL_URL"
+mv "$TMP_FILE" "$MODEL_FILE"
+
+echo
+ls -lh "$MODEL_FILE"
+echo "Model ready for bundling into the native app."
