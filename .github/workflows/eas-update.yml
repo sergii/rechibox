@@ -20,6 +20,10 @@ on:
     workflows: [CI]
     types: [completed]
 
+concurrency:
+  group: eas-update-${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'preview' }}
+  cancel-in-progress: true
+
 jobs:
   publish:
     if: >-
