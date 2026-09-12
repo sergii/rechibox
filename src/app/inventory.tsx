@@ -153,6 +153,7 @@ export default function InventoryScreen() {
   const includedItems = items.filter((item) => item.included);
   const hasBlankIncludedName = includedItems.some((item) => item.name.trim().length === 0);
   const canConfirm = includedItems.length > 0 && !hasBlankIncludedName;
+  const captureDisabled = !cameraReady || isCapturing || appState !== 'active';
 
   if (!permission) {
     return (
@@ -211,11 +212,11 @@ export default function InventoryScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
         style={styles.flex}>
-        <ScrollView
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled">
-          {stage === 'camera' ? (
-            <>
+        {stage === 'camera' ? (
+          <View style={styles.flex}>
+            <ScrollView
+              contentContainerStyle={styles.cameraContent}
+              keyboardShouldPersistTaps="handled">
               <Text accessibilityRole="header" style={[styles.heading, { color: colors.text }]}>
                 Сфотографуйте речі
               </Text>
@@ -241,7 +242,9 @@ export default function InventoryScreen() {
                   />
                 ) : (
                   <View style={styles.cameraPaused}>
-                    <Text style={styles.cameraPausedText}>Камера призупинена, поки застосунок неактивний.</Text>
+                    <Text style={styles.cameraPausedText}>
+                      Камера призупинена, поки застосунок неактивний.
+                    </Text>
                   </View>
                 )}
                 {appState === 'active' ? (
@@ -257,197 +260,205 @@ export default function InventoryScreen() {
                   {message}
                 </Text>
               ) : null}
+            </ScrollView>
+
+            <View
+              style={[
+                styles.cameraActionBar,
+                { backgroundColor: colors.background, borderTopColor: colors.border },
+              ]}>
               <Pressable
                 accessibilityRole="button"
-                accessibilityState={{
-                  disabled: !cameraReady || isCapturing || appState !== 'active',
-                }}
-                disabled={!cameraReady || isCapturing || appState !== 'active'}
+                accessibilityState={{ disabled: captureDisabled }}
+                disabled={captureDisabled}
                 onPress={handleCapture}
                 style={({ pressed }) => [
                   styles.primaryButton,
                   {
                     backgroundColor: colors.text,
-                    opacity:
-                      !cameraReady || isCapturing || appState !== 'active'
-                        ? 0.4
-                        : pressed
-                          ? 0.75
-                          : 1,
+                    opacity: captureDisabled ? 0.4 : pressed ? 0.75 : 1,
                   },
                 ]}>
                 <Text style={[styles.primaryButtonText, { color: colors.background }]}>
                   {isCapturing ? 'Фотографуємо…' : cameraReady ? 'Зробити фото' : 'Готуємо камеру…'}
                 </Text>
               </Pressable>
-            </>
-          ) : null}
-
-          {stage === 'preview' && photoUri ? (
-            <>
-              <Text accessibilityRole="header" style={[styles.heading, { color: colors.text }]}>
-                Перевірте фото
-              </Text>
-              <Image
-                accessibilityLabel="Фото речей для інвентарю"
-                accessibilityRole="image"
-                source={{ uri: photoUri }}
-                style={[styles.photo, { backgroundColor: colors.card }]}
-              />
-              <Text style={[styles.note, { color: colors.text }]}>{MOCK_AI_NOTICE}</Text>
-              <Pressable
-                accessibilityRole="button"
-                onPress={handleRecognize}
-                style={({ pressed }) => [
-                  styles.primaryButton,
-                  { backgroundColor: colors.text, opacity: pressed ? 0.75 : 1 },
-                ]}>
-                <Text style={[styles.primaryButtonText, { color: colors.background }]}>
-                  Запустити mock AI-розпізнавання
-                </Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                onPress={handleRetake}
-                style={({ pressed }) => [
-                  styles.secondaryButton,
-                  { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
-                ]}>
-                <Text style={[styles.secondaryButtonText, { color: colors.text }]}>Перезняти</Text>
-              </Pressable>
-            </>
-          ) : null}
-
-          {stage === 'recognizing' ? (
-            <View style={styles.centeredState}>
-              <ActivityIndicator />
-              <Text accessibilityLiveRegion="polite" style={[styles.body, { color: colors.text }]}>
-                Імітуємо AI-розпізнавання…
-              </Text>
-              <Text style={[styles.note, { color: colors.text }]}>{MOCK_AI_NOTICE}</Text>
             </View>
-          ) : null}
+          </View>
+        ) : (
+          <ScrollView
+            contentContainerStyle={styles.content}
+            keyboardShouldPersistTaps="handled">
+            {stage === 'preview' && photoUri ? (
+              <>
+                <Text accessibilityRole="header" style={[styles.heading, { color: colors.text }]}>
+                  Перевірте фото
+                </Text>
+                <Image
+                  accessibilityLabel="Фото речей для інвентарю"
+                  accessibilityRole="image"
+                  source={{ uri: photoUri }}
+                  style={[styles.photo, { backgroundColor: colors.card }]}
+                />
+                <Text style={[styles.note, { color: colors.text }]}>{MOCK_AI_NOTICE}</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={handleRecognize}
+                  style={({ pressed }) => [
+                    styles.primaryButton,
+                    { backgroundColor: colors.text, opacity: pressed ? 0.75 : 1 },
+                  ]}>
+                  <Text style={[styles.primaryButtonText, { color: colors.background }]}>
+                    Запустити mock AI-розпізнавання
+                  </Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={handleRetake}
+                  style={({ pressed }) => [
+                    styles.secondaryButton,
+                    { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
+                  ]}>
+                  <Text style={[styles.secondaryButtonText, { color: colors.text }]}>Перезняти</Text>
+                </Pressable>
+              </>
+            ) : null}
 
-          {stage === 'review' ? (
-            <>
-              <Text accessibilityRole="header" style={[styles.heading, { color: colors.text }]}>
-                Перевірте розпізнані речі
-              </Text>
-              <Text style={[styles.body, { color: colors.text }]}>
-                Виправте назви або вимкніть речі, які не потрібно додавати.
-              </Text>
-              <Text style={[styles.note, { color: colors.text }]}>{MOCK_AI_NOTICE}</Text>
+            {stage === 'recognizing' ? (
+              <View style={styles.centeredState}>
+                <ActivityIndicator />
+                <Text accessibilityLiveRegion="polite" style={[styles.body, { color: colors.text }]}>
+                  Імітуємо AI-розпізнавання…
+                </Text>
+                <Text style={[styles.note, { color: colors.text }]}>{MOCK_AI_NOTICE}</Text>
+              </View>
+            ) : null}
 
-              {items.map((item) => {
-                const confidencePercent = Math.round(item.confidence * 100);
-                const isUncertain = item.confidence < 0.6;
+            {stage === 'review' ? (
+              <>
+                <Text accessibilityRole="header" style={[styles.heading, { color: colors.text }]}>
+                  Перевірте розпізнані речі
+                </Text>
+                <Text style={[styles.body, { color: colors.text }]}>
+                  Виправте назви або вимкніть речі, які не потрібно додавати.
+                </Text>
+                <Text style={[styles.note, { color: colors.text }]}>{MOCK_AI_NOTICE}</Text>
 
-                return (
-                  <View
-                    key={item.id}
-                    style={[
-                      styles.itemCard,
-                      { backgroundColor: colors.card, borderColor: colors.border },
-                    ]}>
-                    <View style={styles.itemHeader}>
-                      <View style={styles.itemHeaderText}>
-                        <Text style={[styles.confidence, { color: colors.text }]}>
-                          Впевненість: {confidencePercent}%
-                        </Text>
-                        {isUncertain ? (
-                          <Text style={[styles.uncertain, { color: colors.text }]}>
-                            Низька впевненість — перевірте назву.
+                {items.map((item) => {
+                  const confidencePercent = Math.round(item.confidence * 100);
+                  const isUncertain = item.confidence < 0.6;
+
+                  return (
+                    <View
+                      key={item.id}
+                      style={[
+                        styles.itemCard,
+                        { backgroundColor: colors.card, borderColor: colors.border },
+                      ]}>
+                      <View style={styles.itemHeader}>
+                        <View style={styles.itemHeaderText}>
+                          <Text style={[styles.confidence, { color: colors.text }]}>
+                            Впевненість: {confidencePercent}%
                           </Text>
-                        ) : null}
+                          {isUncertain ? (
+                            <Text style={[styles.uncertain, { color: colors.text }]}>
+                              Низька впевненість — перевірте назву.
+                            </Text>
+                          ) : null}
+                        </View>
+                        <Switch
+                          accessibilityLabel={`Додати ${item.name || 'цю річ'} до інвентарю`}
+                          onValueChange={(included) => updateItem(item.id, { included })}
+                          value={item.included}
+                        />
                       </View>
-                      <Switch
-                        accessibilityLabel={`Додати ${item.name || 'цю річ'} до інвентарю`}
-                        onValueChange={(included) => updateItem(item.id, { included })}
-                        value={item.included}
+                      <TextInput
+                        accessibilityLabel="Назва розпізнаної речі"
+                        editable={item.included}
+                        onChangeText={(name) => updateItem(item.id, { name })}
+                        placeholder="Назва речі"
+                        placeholderTextColor={colors.border}
+                        style={[
+                          styles.input,
+                          {
+                            borderColor: colors.border,
+                            color: colors.text,
+                            opacity: item.included ? 1 : 0.45,
+                          },
+                        ]}
+                        value={item.name}
                       />
                     </View>
-                    <TextInput
-                      accessibilityLabel="Назва розпізнаної речі"
-                      editable={item.included}
-                      onChangeText={(name) => updateItem(item.id, { name })}
-                      placeholder="Назва речі"
-                      placeholderTextColor={colors.border}
-                      style={[
-                        styles.input,
-                        {
-                          borderColor: colors.border,
-                          color: colors.text,
-                          opacity: item.included ? 1 : 0.45,
-                        },
-                      ]}
-                      value={item.name}
-                    />
-                  </View>
-                );
-              })}
+                  );
+                })}
 
-              {hasBlankIncludedName ? (
-                <Text accessibilityLiveRegion="polite" style={[styles.error, { color: colors.text }]}>
-                  Дайте назву кожній речі, яку хочете підтвердити.
-                </Text>
-              ) : null}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ disabled: !canConfirm }}
-                disabled={!canConfirm}
-                onPress={() => setStage('confirmed')}
-                style={({ pressed }) => [
-                  styles.primaryButton,
-                  {
-                    backgroundColor: colors.text,
-                    opacity: !canConfirm ? 0.4 : pressed ? 0.75 : 1,
-                  },
-                ]}>
-                <Text style={[styles.primaryButtonText, { color: colors.background }]}>
-                  Підтвердити {includedItems.length} {includedItems.length === 1 ? 'річ' : 'речі'}
-                </Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                onPress={handleRetake}
-                style={({ pressed }) => [
-                  styles.secondaryButton,
-                  { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
-                ]}>
-                <Text style={[styles.secondaryButtonText, { color: colors.text }]}>Зробити інше фото</Text>
-              </Pressable>
-            </>
-          ) : null}
-
-          {stage === 'confirmed' ? (
-            <>
-              <Text accessibilityRole="header" style={[styles.heading, { color: colors.text }]}>
-                Інвентар підтверджено локально
-              </Text>
-              <Text accessibilityLiveRegion="polite" style={[styles.body, { color: colors.text }]}>
-                Це демонстраційний результат. Дані не відправлені в backend і не збережені після цього сеансу.
-              </Text>
-              <View style={[styles.resultCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                {includedItems.map((item) => (
-                  <Text key={item.id} style={[styles.resultItem, { color: colors.text }]}>
-                    • {item.name.trim()}
+                {hasBlankIncludedName ? (
+                  <Text accessibilityLiveRegion="polite" style={[styles.error, { color: colors.text }]}>
+                    Дайте назву кожній речі, яку хочете підтвердити.
                   </Text>
-                ))}
-              </View>
-              <Pressable
-                accessibilityRole="button"
-                onPress={handleStartOver}
-                style={({ pressed }) => [
-                  styles.primaryButton,
-                  { backgroundColor: colors.text, opacity: pressed ? 0.75 : 1 },
-                ]}>
-                <Text style={[styles.primaryButtonText, { color: colors.background }]}>
-                  Додати ще фото
+                ) : null}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: !canConfirm }}
+                  disabled={!canConfirm}
+                  onPress={() => setStage('confirmed')}
+                  style={({ pressed }) => [
+                    styles.primaryButton,
+                    {
+                      backgroundColor: colors.text,
+                      opacity: !canConfirm ? 0.4 : pressed ? 0.75 : 1,
+                    },
+                  ]}>
+                  <Text style={[styles.primaryButtonText, { color: colors.background }]}>
+                    Підтвердити {includedItems.length} {includedItems.length === 1 ? 'річ' : 'речі'}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={handleRetake}
+                  style={({ pressed }) => [
+                    styles.secondaryButton,
+                    { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
+                  ]}>
+                  <Text style={[styles.secondaryButtonText, { color: colors.text }]}>Зробити інше фото</Text>
+                </Pressable>
+              </>
+            ) : null}
+
+            {stage === 'confirmed' ? (
+              <>
+                <Text accessibilityRole="header" style={[styles.heading, { color: colors.text }]}>
+                  Інвентар підтверджено локально
                 </Text>
-              </Pressable>
-            </>
-          ) : null}
-        </ScrollView>
+                <Text accessibilityLiveRegion="polite" style={[styles.body, { color: colors.text }]}>
+                  Це демонстраційний результат. Дані не відправлені в backend і не збережені після цього сеансу.
+                </Text>
+                <View
+                  style={[
+                    styles.resultCard,
+                    { backgroundColor: colors.card, borderColor: colors.border },
+                  ]}>
+                  {includedItems.map((item) => (
+                    <Text key={item.id} style={[styles.resultItem, { color: colors.text }]}>
+                      • {item.name.trim()}
+                    </Text>
+                  ))}
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={handleStartOver}
+                  style={({ pressed }) => [
+                    styles.primaryButton,
+                    { backgroundColor: colors.text, opacity: pressed ? 0.75 : 1 },
+                  ]}>
+                  <Text style={[styles.primaryButtonText, { color: colors.background }]}>
+                    Додати ще фото
+                  </Text>
+                </Pressable>
+              </>
+            ) : null}
+          </ScrollView>
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -457,6 +468,13 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   screen: { flex: 1 },
   content: { padding: 24, gap: 16 },
+  cameraContent: { padding: 24, paddingBottom: 20, gap: 16 },
+  cameraActionBar: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 12,
+  },
   heading: { fontSize: 26, fontWeight: '700' },
   body: { fontSize: 16, lineHeight: 24 },
   note: { fontSize: 14, lineHeight: 21 },
