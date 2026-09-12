@@ -476,7 +476,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   cameraPaused: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
