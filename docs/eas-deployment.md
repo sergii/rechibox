@@ -20,23 +20,45 @@ The script will:
 
 After the command completes, review and commit all generated changes, including `package.json`, `package-lock.json`, and `app.json`.
 
-## GitHub secret
+## GitHub token
 
-Create an Expo access token and save it as the repository Actions secret named `EXPO_TOKEN`.
+Run:
 
-Never commit the token to the repository.
+```bash
+npm run eas:token
+```
+
+On macOS this opens the Expo access-token page, asks for the token with hidden terminal input, and stores it directly in GitHub Actions as the `EXPO_TOKEN` repository secret using `gh`.
+
+The token is never written to the repository.
+
+## iPhone setup
+
+If EAS does not already know the test iPhone, register it with:
+
+```bash
+npm run eas:device:ios
+```
+
+Prepare Apple signing credentials for the preview profile with:
+
+```bash
+npm run eas:credentials:ios
+```
+
+These are account-level operations and can require interactive Apple authentication.
 
 ## Automated flow
 
 ### Pull requests
 
-`.github/workflows/eas-pr-preview.yml` publishes an EAS preview for pull requests and comments the preview information on the PR when EAS is fully configured and `EXPO_TOKEN` is available.
+`.github/workflows/eas-pr-preview.yml` publishes an EAS preview for pull requests and comments the preview information on the PR when EAS is fully configured and `EXPO_TOKEN` is available. Superseded preview jobs are cancelled automatically.
 
 ### Main branch
 
-CI runs typecheck and lint on every push to `main`. After a successful CI run, `.github/workflows/eas-update.yml` automatically publishes the commit to the `preview` channel.
+CI runs typecheck and lint on every push to `main`. After a successful CI run, `.github/workflows/eas-update.yml` automatically publishes the commit to the `preview` channel. Superseded preview update jobs are cancelled automatically.
 
-If EAS is not configured yet, the automatic publish job exits successfully without publishing. This keeps bootstrap commits from producing false failures.
+If EAS is not configured yet, the automatic publish path does not publish an update. This keeps bootstrap commits from producing false deployment failures.
 
 ### Production updates
 
@@ -51,7 +73,14 @@ Use the `EAS Build` workflow manually and select:
 
 The workflow queues the build in Expo and returns immediately.
 
-The first iOS cloud build can still require Apple signing/credential setup. That is an account-level operation and cannot be stored in the repository.
+Equivalent local commands are available when useful:
+
+```bash
+npm run eas:build:preview:ios
+npm run eas:build:production:ios
+```
+
+The first iOS cloud build can still require Apple signing credentials and device registration for internal distribution.
 
 ## Runtime compatibility
 
@@ -63,6 +92,7 @@ Changes such as adding a native library, changing ExecuTorch backends, changing 
 
 ```bash
 npm run eas:check
+npm run eas:status
 npm run eas:update:preview
 npm run eas:update:production
 ```
