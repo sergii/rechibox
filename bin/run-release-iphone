@@ -89,35 +89,30 @@ echo "Available physical Apple devices:"
 printf '%s\n' "$DEVICE_LINES" | awk -F '\t' '{ printf "  %s — %s (%s, %s)\n", $2, $3, $1, $4 }'
 echo
 
-if [[ ! -d ios ]]; then
-  echo "Generating the iOS native project with CNG."
-  cp package.json "$TMP_DIR/package.json"
-  if [[ -f package-lock.json ]]; then
-    cp package-lock.json "$TMP_DIR/package-lock.json"
-  fi
-  RESTORE_PACKAGE_FILES=1
-  npx expo prebuild --platform ios --no-install
-  cp "$TMP_DIR/package.json" package.json
-  if [[ -f "$TMP_DIR/package-lock.json" ]]; then
-    cp "$TMP_DIR/package-lock.json" package-lock.json
-  fi
-  RESTORE_PACKAGE_FILES=0
+echo "Regenerating the ignored iOS project from app.json so icons and config plugins are current."
+rm -rf ios
+cp package.json "$TMP_DIR/package.json"
+if [[ -f package-lock.json ]]; then
+  cp package-lock.json "$TMP_DIR/package-lock.json"
 fi
+RESTORE_PACKAGE_FILES=1
+npx expo prebuild --platform ios --no-install
+cp "$TMP_DIR/package.json" package.json
+if [[ -f "$TMP_DIR/package-lock.json" ]]; then
+  cp "$TMP_DIR/package-lock.json" package-lock.json
+fi
+RESTORE_PACKAGE_FILES=0
 
-if [[ ! -d ios/Pods || ! -f ios/Podfile.lock ]]; then
-  echo "Installing CocoaPods with the Ruby 3.4-compatible gem set."
-  (
-    cd ios
-    ruby -e '
-      gem "json", "< 3"
-      gem "activesupport", ">= 7", "< 8"
-      gem "cocoapods", "= 1.17.0"
-      load Gem.bin_path("cocoapods", "pod", "1.17.0")
-    ' -- install --repo-update
-  )
-else
-  echo "Using existing ios/Pods and Podfile.lock."
-fi
+echo "Installing CocoaPods with the Ruby 3.4-compatible gem set."
+(
+  cd ios
+  ruby -e '
+    gem "json", "< 3"
+    gem "activesupport", ">= 7", "< 8"
+    gem "cocoapods", "= 1.17.0"
+    load Gem.bin_path("cocoapods", "pod", "1.17.0")
+  ' -- install --repo-update
+)
 
 echo
 echo "Building Release: JavaScript and assets will be bundled inside the app; Metro is not required after installation."
