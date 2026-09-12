@@ -1,6 +1,5 @@
 import { useImage } from '@shopify/react-native-skia';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { useTheme } from 'expo-router';
 import { models, useObjectDetector } from 'react-native-executorch';
 import { useEffect, useRef, useState } from 'react';
 import type { ColorValue } from 'react-native';
@@ -11,16 +10,19 @@ import {
   KeyboardAvoidingView,
   Linking,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
-  Text,
-  TextInput,
+  Text as RNText,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
+import { Text } from '@/components/ui/text';
+import { useThemeColors } from '@/components/ui/theme-provider';
 import {
   createInventoryRecognitionItems,
   type InventoryRecognitionItem,
@@ -101,9 +103,9 @@ function PhotoWithDetections({
                     opacity: item.included ? 1 : 0.35,
                   },
                 ]}>
-                <Text numberOfLines={1} style={styles.detectionLabel}>
+                <RNText numberOfLines={1} style={styles.detectionLabel}>
                   {item.name} {Math.round(item.confidence * 100)}%
-                </Text>
+                </RNText>
               </View>
             );
           })}
@@ -113,8 +115,20 @@ function PhotoWithDetections({
   );
 }
 
+function ErrorText({ children }: { children: string }) {
+  return (
+    <Text accessibilityLiveRegion="polite" className="text-destructive leading-5" variant="small">
+      {children}
+    </Text>
+  );
+}
+
+function LocalNotice() {
+  return <Text variant="muted">{LOCAL_AI_NOTICE}</Text>;
+}
+
 export default function InventoryScreen() {
-  const { colors } = useTheme();
+  const colors = useThemeColors();
   const [permission, requestPermission, refreshPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
   const [appState, setAppState] = useState(AppState.currentState);
@@ -291,7 +305,7 @@ export default function InventoryScreen() {
         style={[styles.screen, { backgroundColor: colors.background }]}>
         <View style={styles.centeredState}>
           <ActivityIndicator />
-          <Text style={[styles.body, { color: colors.text }]}>Перевіряємо доступ до камери…</Text>
+          <Text>Перевіряємо доступ до камери…</Text>
         </View>
       </SafeAreaView>
     );
@@ -303,29 +317,20 @@ export default function InventoryScreen() {
         edges={['left', 'right', 'bottom']}
         style={[styles.screen, { backgroundColor: colors.background }]}>
         <ScrollView contentContainerStyle={styles.content}>
-          <Text accessibilityRole="header" style={[styles.heading, { color: colors.text }]}>
+          <Text accessibilityRole="header" variant="h2">
             Камера потрібна для інвентарю
           </Text>
-          <Text style={[styles.body, { color: colors.text }]}>
-            Rechibox використовує камеру лише тоді, коли ви відкриваєте цей сценарій і робите фото речей.
+          <Text>
+            Rechibox використовує камеру лише тоді, коли ви відкриваєте цей сценарій і робите фото
+            речей.
           </Text>
-          <Text style={[styles.note, { color: colors.text }]}>{LOCAL_AI_NOTICE}</Text>
-          {message ? (
-            <Text accessibilityLiveRegion="polite" style={[styles.error, { color: colors.text }]}>
-              {message}
-            </Text>
-          ) : null}
-          <Pressable
-            accessibilityRole="button"
+          <LocalNotice />
+          {message ? <ErrorText>{message}</ErrorText> : null}
+          <Button
             onPress={permission.canAskAgain ? handleRequestPermission : handleOpenSettings}
-            style={({ pressed }) => [
-              styles.primaryButton,
-              { backgroundColor: colors.text, opacity: pressed ? 0.75 : 1 },
-            ]}>
-            <Text style={[styles.primaryButtonText, { color: colors.background }]}>
-              {permission.canAskAgain ? 'Надати доступ до камери' : 'Відкрити налаштування'}
-            </Text>
-          </Pressable>
+            size="lg">
+            {permission.canAskAgain ? 'Надати доступ до камери' : 'Відкрити налаштування'}
+          </Button>
         </ScrollView>
       </SafeAreaView>
     );
@@ -344,11 +349,12 @@ export default function InventoryScreen() {
             <ScrollView
               contentContainerStyle={styles.cameraContent}
               keyboardShouldPersistTaps="handled">
-              <Text accessibilityRole="header" style={[styles.heading, { color: colors.text }]}>
+              <Text accessibilityRole="header" variant="h2">
                 Сфотографуйте речі
               </Text>
-              <Text style={[styles.body, { color: colors.text }]}>
-                Покладіть кілька речей у кадр. Після фото ви зможете перевірити результат перед підтвердженням.
+              <Text>
+                Покладіть кілька речей у кадр. Після фото ви зможете перевірити результат перед
+                підтвердженням.
               </Text>
 
               <View style={[styles.cameraFrame, { backgroundColor: colors.card }]}>
@@ -369,34 +375,28 @@ export default function InventoryScreen() {
                   />
                 ) : (
                   <View style={styles.cameraPaused}>
-                    <Text style={styles.cameraPausedText}>
+                    <RNText style={styles.cameraPausedText}>
                       Камера призупинена, поки застосунок неактивний.
-                    </Text>
+                    </RNText>
                   </View>
                 )}
                 {appState === 'active' ? (
                   <View pointerEvents="none" style={styles.viewfinder}>
-                    <Text style={styles.viewfinderLabel}>Помістіть речі всередину рамки</Text>
+                    <RNText style={styles.viewfinderLabel}>Помістіть речі всередину рамки</RNText>
                   </View>
                 ) : null}
               </View>
 
-              <Text style={[styles.note, { color: colors.text }]}>{LOCAL_AI_NOTICE}</Text>
+              <LocalNotice />
               {!detector.isReady && !detector.error ? (
-                <Text accessibilityLiveRegion="polite" style={[styles.note, { color: colors.text }]}>
+                <Text accessibilityLiveRegion="polite" variant="muted">
                   Завантажуємо AI-модель для першого запуску: {modelProgress}%
                 </Text>
               ) : null}
               {detector.error ? (
-                <Text accessibilityLiveRegion="polite" style={[styles.error, { color: colors.text }]}>
-                  AI-модель не завантажилась. Перевірте мережу та перезапустіть екран.
-                </Text>
+                <ErrorText>AI-модель не завантажилась. Перевірте мережу та перезапустіть екран.</ErrorText>
               ) : null}
-              {message ? (
-                <Text accessibilityLiveRegion="polite" style={[styles.error, { color: colors.text }]}>
-                  {message}
-                </Text>
-              ) : null}
+              {message ? <ErrorText>{message}</ErrorText> : null}
             </ScrollView>
 
             <View
@@ -404,31 +404,22 @@ export default function InventoryScreen() {
                 styles.cameraActionBar,
                 { backgroundColor: colors.background, borderTopColor: colors.border },
               ]}>
-              <Pressable
-                accessibilityRole="button"
+              <Button
                 accessibilityState={{ disabled: captureDisabled }}
                 disabled={captureDisabled}
+                loading={isCapturing}
                 onPress={handleCapture}
-                style={({ pressed }) => [
-                  styles.primaryButton,
-                  {
-                    backgroundColor: colors.text,
-                    opacity: captureDisabled ? 0.4 : pressed ? 0.75 : 1,
-                  },
-                ]}>
-                <Text style={[styles.primaryButtonText, { color: colors.background }]}>
-                  {isCapturing ? 'Фотографуємо…' : cameraReady ? 'Зробити фото' : 'Готуємо камеру…'}
-                </Text>
-              </Pressable>
+                size="lg"
+                variant="default">
+                {isCapturing ? 'Фотографуємо…' : cameraReady ? 'Зробити фото' : 'Готуємо камеру…'}
+              </Button>
             </View>
           </View>
         ) : (
-          <ScrollView
-            contentContainerStyle={styles.content}
-            keyboardShouldPersistTaps="handled">
+          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
             {stage === 'preview' && photoUri ? (
               <>
-                <Text accessibilityRole="header" style={[styles.heading, { color: colors.text }]}>
+                <Text accessibilityRole="header" variant="h2">
                   Перевірте фото
                 </Text>
                 <PhotoWithDetections
@@ -438,87 +429,64 @@ export default function InventoryScreen() {
                   items={[]}
                   uri={photoUri}
                 />
-                <Text style={[styles.note, { color: colors.text }]}>{LOCAL_AI_NOTICE}</Text>
+                <LocalNotice />
                 {!detector.isReady && !detector.error ? (
-                  <Text accessibilityLiveRegion="polite" style={[styles.note, { color: colors.text }]}>
+                  <Text accessibilityLiveRegion="polite" variant="muted">
                     Готуємо AI-модель: {modelProgress}%
                   </Text>
                 ) : null}
                 {detector.error ? (
-                  <Text accessibilityLiveRegion="polite" style={[styles.error, { color: colors.text }]}>
+                  <ErrorText>
                     AI-модель недоступна. Перевірте мережу та відкрийте цей екран ще раз.
-                  </Text>
+                  </ErrorText>
                 ) : null}
-                {message ? (
-                  <Text accessibilityLiveRegion="polite" style={[styles.error, { color: colors.text }]}>
-                    {message}
-                  </Text>
-                ) : null}
-                <Pressable
-                  accessibilityRole="button"
+                {message ? <ErrorText>{message}</ErrorText> : null}
+                <Button
                   accessibilityState={{ disabled: recognizeDisabled }}
                   disabled={recognizeDisabled}
                   onPress={() => void handleRecognize()}
-                  style={({ pressed }) => [
-                    styles.primaryButton,
-                    {
-                      backgroundColor: colors.text,
-                      opacity: recognizeDisabled ? 0.4 : pressed ? 0.75 : 1,
-                    },
-                  ]}>
-                  <Text style={[styles.primaryButtonText, { color: colors.background }]}>
-                    {!skiaImage
-                      ? 'Готуємо фото…'
-                      : !aiReady
-                        ? `Готуємо AI… ${modelProgress}%`
-                        : 'Розпізнати речі'}
-                  </Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={handleRetake}
-                  style={({ pressed }) => [
-                    styles.secondaryButton,
-                    { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
-                  ]}>
-                  <Text style={[styles.secondaryButtonText, { color: colors.text }]}>Перезняти</Text>
-                </Pressable>
+                  size="lg">
+                  {!skiaImage
+                    ? 'Готуємо фото…'
+                    : !aiReady
+                      ? `Готуємо AI… ${modelProgress}%`
+                      : 'Розпізнати речі'}
+                </Button>
+                <Button onPress={handleRetake} size="lg" variant="outline">
+                  Перезняти
+                </Button>
               </>
             ) : null}
 
             {stage === 'recognizing' ? (
               <View style={styles.centeredState}>
                 <ActivityIndicator />
-                <Text accessibilityLiveRegion="polite" style={[styles.body, { color: colors.text }]}>
-                  Розпізнаємо речі на пристрої…
-                </Text>
-                <Text style={[styles.note, { color: colors.text }]}>{LOCAL_AI_NOTICE}</Text>
+                <Text accessibilityLiveRegion="polite">Розпізнаємо речі на пристрої…</Text>
+                <LocalNotice />
               </View>
             ) : null}
 
             {stage === 'review' && photoUri ? (
               <>
-                <Text accessibilityRole="header" style={[styles.heading, { color: colors.text }]}>
+                <Text accessibilityRole="header" variant="h2">
                   Перевірте розпізнані речі
                 </Text>
-                <Text style={[styles.body, { color: colors.text }]}>
-                  Виправте назви або вимкніть речі, які не потрібно додавати.
-                </Text>
-                <View
-                  style={[
-                    styles.debugToggleRow,
-                    { backgroundColor: colors.card, borderColor: colors.border },
-                  ]}>
-                  <View style={styles.debugToggleCopy}>
-                    <Text style={[styles.debugToggleTitle, { color: colors.text }]}>Debug mode</Text>
-                    <Text style={[styles.note, { color: colors.text }]}>Показувати сирі дані detector-а</Text>
+                <Text>Виправте назви або вимкніть речі, які не потрібно додавати.</Text>
+
+                <Card className="p-4">
+                  <View style={styles.toggleRow}>
+                    <View style={styles.toggleCopy}>
+                      <Text variant="small">Debug mode</Text>
+                      <Text variant="muted">Показувати сирі дані detector-а</Text>
+                    </View>
+                    <Switch
+                      accessibilityLabel="Debug mode"
+                      onValueChange={setDebugMode}
+                      value={debugMode}
+                    />
                   </View>
-                  <Switch
-                    accessibilityLabel="Debug mode"
-                    onValueChange={setDebugMode}
-                    value={debugMode}
-                  />
-                </View>
+                </Card>
+
                 <PhotoWithDetections
                   backgroundColor={colors.card}
                   imageHeight={photoHeight}
@@ -526,29 +494,30 @@ export default function InventoryScreen() {
                   items={items}
                   uri={photoUri}
                 />
+
                 {debugMode ? (
-                  <View
-                    style={[
-                      styles.debugPanel,
-                      { backgroundColor: colors.card, borderColor: colors.border },
-                    ]}>
-                    <Text style={[styles.debugToggleTitle, { color: colors.text }]}>Detector debug</Text>
-                    <Text style={[styles.debugCode, { color: colors.text }]}>model: {DETECTOR_MODEL_NAME}</Text>
-                    <Text style={[styles.debugCode, { color: colors.text }]}>image: {photoWidth}×{photoHeight}</Text>
-                    <Text style={[styles.debugCode, { color: colors.text }]}>inference: {recognitionMs ?? '—'} ms</Text>
-                    <Text style={[styles.debugCode, { color: colors.text }]}>detections: {items.length}</Text>
-                    <Text style={[styles.debugCode, { color: colors.text }]}>confidence threshold: {CONFIDENCE_THRESHOLD}</Text>
-                    <Text style={[styles.debugCode, { color: colors.text }]}>IoU threshold: {IOU_THRESHOLD}</Text>
+                  <Card className="gap-1.5 p-4">
+                    <Text variant="small">Detector debug</Text>
+                    <RNText style={[styles.debugCode, { color: colors.foreground }]}>model: {DETECTOR_MODEL_NAME}</RNText>
+                    <RNText style={[styles.debugCode, { color: colors.foreground }]}>image: {photoWidth}×{photoHeight}</RNText>
+                    <RNText style={[styles.debugCode, { color: colors.foreground }]}>inference: {recognitionMs ?? '—'} ms</RNText>
+                    <RNText style={[styles.debugCode, { color: colors.foreground }]}>detections: {items.length}</RNText>
+                    <RNText style={[styles.debugCode, { color: colors.foreground }]}>confidence threshold: {CONFIDENCE_THRESHOLD}</RNText>
+                    <RNText style={[styles.debugCode, { color: colors.foreground }]}>IoU threshold: {IOU_THRESHOLD}</RNText>
                     {items.map((item, index) => (
-                      <Text key={`debug-${item.id}`} style={[styles.debugCode, { color: colors.text }]}>
+                      <RNText
+                        key={`debug-${item.id}`}
+                        style={[styles.debugCode, { color: colors.foreground }]}>
                         {index + 1}. {item.sourceLabel} · {(item.confidence * 100).toFixed(1)}% · [{item.box.xmin.toFixed(0)}, {item.box.ymin.toFixed(0)}, {item.box.xmax.toFixed(0)}, {item.box.ymax.toFixed(0)}]
-                      </Text>
+                      </RNText>
                     ))}
-                  </View>
+                  </Card>
                 ) : null}
+
                 {items.length === 0 ? (
-                  <Text accessibilityLiveRegion="polite" style={[styles.note, { color: colors.text }]}>
-                    Модель не знайшла впевнених об’єктів. Поточний detector розпізнає базові категорії COCO, тому специфічні речі може пропускати.
+                  <Text accessibilityLiveRegion="polite" variant="muted">
+                    Модель не знайшла впевнених об’єктів. Поточний detector розпізнає базові
+                    категорії COCO, тому специфічні речі може пропускати.
                   </Text>
                 ) : null}
 
@@ -557,29 +526,18 @@ export default function InventoryScreen() {
                   const isUncertain = item.confidence < 0.6;
 
                   return (
-                    <View
-                      key={item.id}
-                      style={[
-                        styles.itemCard,
-                        { backgroundColor: colors.card, borderColor: colors.border },
-                      ]}>
+                    <Card className="gap-2 p-3" key={item.id}>
                       <View style={styles.itemRow}>
-                        <TextInput
-                          accessibilityLabel="Назва розпізнаної речі"
-                          editable={item.included}
-                          onChangeText={(name) => updateItem(item.id, { name })}
-                          placeholder="Назва речі"
-                          placeholderTextColor={colors.border}
-                          style={[
-                            styles.input,
-                            {
-                              borderColor: colors.border,
-                              color: colors.text,
-                              opacity: item.included ? 1 : 0.45,
-                            },
-                          ]}
-                          value={item.name}
-                        />
+                        <View style={styles.inputWrap}>
+                          <Input
+                            accessibilityLabel="Назва розпізнаної речі"
+                            className={item.included ? undefined : 'opacity-50'}
+                            editable={item.included}
+                            onChangeText={(name) => updateItem(item.id, { name })}
+                            placeholder="Назва речі"
+                            value={item.name}
+                          />
+                        </View>
                         <Switch
                           accessibilityLabel={`Додати ${item.name || 'цю річ'} до інвентарю`}
                           onValueChange={(included) => updateItem(item.id, { included })}
@@ -587,80 +545,52 @@ export default function InventoryScreen() {
                         />
                       </View>
                       <View style={styles.itemMetaRow}>
-                        <Text style={[styles.confidence, { color: colors.text }]}>
-                          {confidencePercent}% впевненість
-                        </Text>
+                        <Text variant="small">{confidencePercent}% впевненість</Text>
                         {isUncertain ? (
-                          <Text style={[styles.uncertain, { color: colors.text }]}>Перевірте назву</Text>
+                          <Text className="text-amber-600 dark:text-amber-400" variant="muted">
+                            Перевірте назву
+                          </Text>
                         ) : null}
                       </View>
-                    </View>
+                    </Card>
                   );
                 })}
 
                 {hasBlankIncludedName ? (
-                  <Text accessibilityLiveRegion="polite" style={[styles.error, { color: colors.text }]}>
-                    Дайте назву кожній речі, яку хочете підтвердити.
-                  </Text>
+                  <ErrorText>Дайте назву кожній речі, яку хочете підтвердити.</ErrorText>
                 ) : null}
-                <Pressable
-                  accessibilityRole="button"
+                <Button
                   accessibilityState={{ disabled: !canConfirm }}
                   disabled={!canConfirm}
                   onPress={() => setStage('confirmed')}
-                  style={({ pressed }) => [
-                    styles.primaryButton,
-                    {
-                      backgroundColor: colors.text,
-                      opacity: !canConfirm ? 0.4 : pressed ? 0.75 : 1,
-                    },
-                  ]}>
-                  <Text style={[styles.primaryButtonText, { color: colors.background }]}>
-                    Підтвердити {includedItems.length} {includedItems.length === 1 ? 'річ' : 'речі'}
-                  </Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={handleRetake}
-                  style={({ pressed }) => [
-                    styles.secondaryButton,
-                    { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
-                  ]}>
-                  <Text style={[styles.secondaryButtonText, { color: colors.text }]}>Зробити інше фото</Text>
-                </Pressable>
+                  size="lg">
+                  {`Підтвердити ${includedItems.length} ${
+                    includedItems.length === 1 ? 'річ' : 'речі'
+                  }`}
+                </Button>
+                <Button onPress={handleRetake} size="lg" variant="outline">
+                  Зробити інше фото
+                </Button>
               </>
             ) : null}
 
             {stage === 'confirmed' ? (
               <>
-                <Text accessibilityRole="header" style={[styles.heading, { color: colors.text }]}>
+                <Text accessibilityRole="header" variant="h2">
                   Інвентар підтверджено локально
                 </Text>
-                <Text accessibilityLiveRegion="polite" style={[styles.body, { color: colors.text }]}>
-                  Речі розпізнані на цьому пристрої. Дані не відправлені в backend і не збережені після цього сеансу.
+                <Text accessibilityLiveRegion="polite">
+                  Речі розпізнані на цьому пристрої. Дані не відправлені в backend і не збережені
+                  після цього сеансу.
                 </Text>
-                <View
-                  style={[
-                    styles.resultCard,
-                    { backgroundColor: colors.card, borderColor: colors.border },
-                  ]}>
+                <Card className="gap-2 p-4">
                   {includedItems.map((item) => (
-                    <Text key={item.id} style={[styles.resultItem, { color: colors.text }]}>
-                      • {item.name.trim()}
-                    </Text>
+                    <Text key={item.id}>• {item.name.trim()}</Text>
                   ))}
-                </View>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={handleStartOver}
-                  style={({ pressed }) => [
-                    styles.primaryButton,
-                    { backgroundColor: colors.text, opacity: pressed ? 0.75 : 1 },
-                  ]}>
-                  <Text style={[styles.primaryButtonText, { color: colors.background }]}>
-                    Додати ще фото
-                  </Text>
-                </Pressable>
+                </Card>
+                <Button onPress={handleStartOver} size="lg">
+                  Додати ще фото
+                </Button>
               </>
             ) : null}
           </ScrollView>
@@ -681,10 +611,6 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 12,
   },
-  heading: { fontSize: 26, fontWeight: '700' },
-  body: { fontSize: 16, lineHeight: 24 },
-  note: { fontSize: 14, lineHeight: 21 },
-  error: { fontSize: 14, lineHeight: 21, fontWeight: '600' },
   centeredState: {
     flexGrow: 1,
     minHeight: 260,
@@ -757,70 +683,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
     paddingVertical: 2,
   },
-  primaryButton: {
-    minHeight: 52,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 12,
-  },
-  primaryButtonText: { fontSize: 16, fontWeight: '600', textAlign: 'center' },
-  secondaryButton: {
-    minHeight: 52,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  secondaryButtonText: { fontSize: 16, fontWeight: '600', textAlign: 'center' },
-  debugToggleRow: {
-    minHeight: 64,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+  toggleRow: {
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
-  debugToggleCopy: { flex: 1, gap: 2 },
-  debugToggleTitle: { fontSize: 14, lineHeight: 20, fontWeight: '700' },
-  debugPanel: {
-    padding: 14,
-    gap: 6,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 12,
-  },
+  toggleCopy: { flex: 1, gap: 4 },
+  itemRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  inputWrap: { flex: 1 },
+  itemMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
   debugCode: {
     fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }),
     fontSize: 12,
     lineHeight: 18,
   },
-  itemCard: {
-    padding: 12,
-    gap: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 12,
-  },
-  itemRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  itemMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
-  confidence: { fontSize: 13, lineHeight: 18, fontWeight: '600' },
-  uncertain: { fontSize: 13, lineHeight: 18 },
-  input: {
-    flex: 1,
-    minHeight: 44,
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 16,
-  },
-  resultCard: {
-    padding: 18,
-    gap: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 12,
-  },
-  resultItem: { fontSize: 16, lineHeight: 24 },
 });

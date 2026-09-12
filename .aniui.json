@@ -1,6 +1,6 @@
 {
-  "componentsDir": "components/ui",
-  "utilPath": "lib/utils.ts",
+  "componentsDir": "src/components/ui",
+  "utilPath": "src/lib/utils.ts",
   "theme": "default",
   "style": "uniwind",
   "tsx": true,
