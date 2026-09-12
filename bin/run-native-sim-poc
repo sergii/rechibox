@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+for command_name in native-sim agent-device; do
+  if ! command -v "$command_name" >/dev/null 2>&1; then
+    echo "Missing required command: $command_name" >&2
+    echo "Run 'npm run experiment:native-sim:doctor' for setup guidance." >&2
+    exit 1
+  fi
+done
+
+if [[ "${RECHIBOX_ALLOW_CLOUD_MACOS:-0}" != "1" ]]; then
+  cat >&2 <<'EOF'
+This command can start remote macOS/iOS Simulator infrastructure and may consume
+billed GitHub Actions macOS minutes for a private repository.
+
+If you explicitly want to run the experiment, rerun with:
+  RECHIBOX_ALLOW_CLOUD_MACOS=1 npm run experiment:native-sim:up
+EOF
+  exit 2
+fi
+
+cat <<'EOF'
+Starting native-sim experiment.
+
+In another terminal, after native-sim reports the proxy is ready, run:
+  agent-device connect proxy
+
+Phase-1 success criteria:
+  - Rechibox launches remotely
+  - Home renders
+  - agent-device can inspect the semantic tree
+  - navigate Home -> AI inventory
+  - capture a screenshot/evidence
+
+Do not evaluate Buoy, camera input, YOLO accuracy, or simulator performance in this pass.
+EOF
+
+echo
+exec native-sim up

@@ -56,3 +56,6 @@ example
 /.argent/secrets.env
 /.argent/recordings/
 /.argent/artifacts/
+
+# Experimental external skills/tools
+/.experiments/

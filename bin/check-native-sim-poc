@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+status() {
+  local label="$1"
+  local cmd="$2"
+  if command -v "$cmd" >/dev/null 2>&1; then
+    printf 'OK   %-18s %s\n' "$label" "$(command -v "$cmd")"
+  else
+    printf 'MISS %-18s %s\n' "$label" "$cmd"
+  fi
+}
+
+echo "Rechibox native-sim PoC doctor"
+echo
+status "native-sim" native-sim
+status "agent-device" agent-device
+status "git" git
+status "gh" gh
+
+echo
+if command -v native-sim >/dev/null 2>&1; then
+  echo "native-sim version: $(native-sim --version 2>/dev/null || echo unknown)"
+else
+  echo "Install manually when you want to run the experiment:"
+  echo "  npm install -g native-sim"
+fi
+
+if command -v agent-device >/dev/null 2>&1; then
+  echo "agent-device version: $(agent-device --version 2>/dev/null || echo unknown)"
+else
+  echo "Install manually when you want to run the experiment:"
+  echo "  npm install -g agent-device@latest"
+fi
+
+echo
+cat <<'EOF'
+This experiment intentionally does not auto-install or auto-run cloud tooling.
+native-sim uses remote macOS/GitHub-hosted simulator infrastructure. For a private
+repository that can consume billed GitHub Actions macOS minutes. Treat native-sim
+as experimental infrastructure, not the Rechibox default verification path.
+EOF
