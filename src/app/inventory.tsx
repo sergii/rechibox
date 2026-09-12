@@ -249,7 +249,7 @@ export default function InventoryScreen() {
                 )}
                 {appState === 'active' ? (
                   <View pointerEvents="none" style={styles.viewfinder}>
-                    <Text style={styles.viewfinderLabel}>Речі мають бути добре видимі</Text>
+                    <Text style={styles.viewfinderLabel}>Помістіть речі всередину рамки</Text>
                   </View>
                 ) : null}
               </View>
@@ -309,7 +309,7 @@ export default function InventoryScreen() {
                     { backgroundColor: colors.text, opacity: pressed ? 0.75 : 1 },
                   ]}>
                   <Text style={[styles.primaryButtonText, { color: colors.background }]}>
-                    Запустити mock AI-розпізнавання
+                    Розпізнати речі
                   </Text>
                 </Pressable>
                 <Pressable
@@ -328,7 +328,7 @@ export default function InventoryScreen() {
               <View style={styles.centeredState}>
                 <ActivityIndicator />
                 <Text accessibilityLiveRegion="polite" style={[styles.body, { color: colors.text }]}>
-                  Імітуємо AI-розпізнавання…
+                  Готуємо демо-результат…
                 </Text>
                 <Text style={[styles.note, { color: colors.text }]}>{MOCK_AI_NOTICE}</Text>
               </View>
@@ -355,39 +355,37 @@ export default function InventoryScreen() {
                         styles.itemCard,
                         { backgroundColor: colors.card, borderColor: colors.border },
                       ]}>
-                      <View style={styles.itemHeader}>
-                        <View style={styles.itemHeaderText}>
-                          <Text style={[styles.confidence, { color: colors.text }]}>
-                            Впевненість: {confidencePercent}%
-                          </Text>
-                          {isUncertain ? (
-                            <Text style={[styles.uncertain, { color: colors.text }]}>
-                              Низька впевненість — перевірте назву.
-                            </Text>
-                          ) : null}
-                        </View>
+                      <View style={styles.itemRow}>
+                        <TextInput
+                          accessibilityLabel="Назва розпізнаної речі"
+                          editable={item.included}
+                          onChangeText={(name) => updateItem(item.id, { name })}
+                          placeholder="Назва речі"
+                          placeholderTextColor={colors.border}
+                          style={[
+                            styles.input,
+                            {
+                              borderColor: colors.border,
+                              color: colors.text,
+                              opacity: item.included ? 1 : 0.45,
+                            },
+                          ]}
+                          value={item.name}
+                        />
                         <Switch
                           accessibilityLabel={`Додати ${item.name || 'цю річ'} до інвентарю`}
                           onValueChange={(included) => updateItem(item.id, { included })}
                           value={item.included}
                         />
                       </View>
-                      <TextInput
-                        accessibilityLabel="Назва розпізнаної речі"
-                        editable={item.included}
-                        onChangeText={(name) => updateItem(item.id, { name })}
-                        placeholder="Назва речі"
-                        placeholderTextColor={colors.border}
-                        style={[
-                          styles.input,
-                          {
-                            borderColor: colors.border,
-                            color: colors.text,
-                            opacity: item.included ? 1 : 0.45,
-                          },
-                        ]}
-                        value={item.name}
-                      />
+                      <View style={styles.itemMetaRow}>
+                        <Text style={[styles.confidence, { color: colors.text }]}>
+                          {confidencePercent}% впевненість
+                        </Text>
+                        {isUncertain ? (
+                          <Text style={[styles.uncertain, { color: colors.text }]}>Перевірте назву</Text>
+                        ) : null}
+                      </View>
                     </View>
                   );
                 })}
@@ -552,21 +550,22 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: { fontSize: 16, fontWeight: '600', textAlign: 'center' },
   itemCard: {
-    padding: 16,
-    gap: 12,
+    padding: 12,
+    gap: 8,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 12,
   },
-  itemHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  itemHeaderText: { flex: 1, gap: 4 },
-  confidence: { fontSize: 14, fontWeight: '600' },
+  itemRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  itemMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
+  confidence: { fontSize: 13, lineHeight: 18, fontWeight: '600' },
   uncertain: { fontSize: 13, lineHeight: 18 },
   input: {
-    minHeight: 48,
+    flex: 1,
+    minHeight: 44,
     borderWidth: 1,
     borderRadius: 10,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 8,
     fontSize: 16,
   },
   resultCard: {
