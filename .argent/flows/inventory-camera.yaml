@@ -1,0 +1,15 @@
+steps:
+  - echo: "Buoy must already be publishing the selected image source before Rechibox launches."
+  - launch: com.sergii.rechibox
+  - await: { visible: { text: "AI-інвентар з камерою" }, timeout: 20000 }
+  - tap: { text: "AI-інвентар з камерою" }
+  - await: { visible: { text: "Сфотографуйте речі" }, timeout: 20000 }
+  - await: { visible: { text: "Зробити фото" }, timeout: 30000 }
+  - tap: { text: "Зробити фото" }
+  - await: { visible: { text: "Перевірте фото" }, timeout: 30000 }
+  - await: { hidden: { text: "Готуємо AI" }, timeout: 300000 }
+  - tap: { text: "Розпізнати речі" }
+  - await: { visible: { text: "Перевірте розпізнані речі" }, timeout: 180000 }
+  - assert: { hidden: { text: "Не вдалося виконати локальне AI-розпізнавання" } }
+  - await: { idle: true, stableFor: 1000, timeout: 10000 }
+  - snapshot: { name: inventory-review, maxMismatch: 1.0 }

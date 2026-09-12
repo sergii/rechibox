@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+MODE="test"
+if [[ "${1:-}" == "--baseline" ]]; then
+  MODE="baseline"
+  shift
+fi
+
+FIXTURE="${1:-${RECHIBOX_CAMERA_FIXTURE:-}}"
+
+if [[ -z "$FIXTURE" ]]; then
+  cat >&2 <<'EOF'
+Usage:
+  npm run agent:inventory:baseline -- /absolute/or/relative/path/to/fixture.jpg
+  npm run agent:inventory:test -- /absolute/or/relative/path/to/fixture.jpg
+
+The first command records the reviewed visual baseline. The second replays the same camera -> capture -> YOLO -> review flow and compares the screenshot.
+EOF
+  exit 2
+fi
+
+if [[ ! -f "$FIXTURE" ]]; then
+  echo "Camera fixture does not exist: $FIXTURE" >&2
+  exit 1
+fi
+
+for command_name in argent buoycam xcrun; do
+  if ! command -v "$command_name" >/dev/null 2>&1; then
+    if [[ "$command_name" == "buoycam" ]] && command -v open >/dev/null 2>&1; then
+      echo "Buoy camera CLI is required for the deterministic camera flow." >&2
+      echo "Opening the Buoy Desktop releases page. Install Buoy Desktop, make buoycam available, then retry." >&2
+      open "https://github.com/Buoy-gg/Buoy-Desktop/releases" >/dev/null 2>&1 || true
+    else
+      echo "Missing required command: $command_name" >&2
+    fi
+    exit 1
+  fi
+done
+
+if ! xcrun simctl list devices booted | grep -q 'iPhone'; then
+  echo "No booted iPhone Simulator found. Start one with 'npm run simulator:ios' first." >&2
+  exit 1
+fi
+
+if ! xcrun simctl get_app_container booted com.sergii.rechibox app >/dev/null 2>&1; then
+  echo "Rechibox is not installed in the booted Simulator." >&2
+  echo "Run 'npm run simulator:ios' once, then rerun this fixture command." >&2
+  exit 1
+fi
+
+FIXTURE_DIR="$(cd "$(dirname "$FIXTURE")" && pwd)"
+FIXTURE_PATH="$FIXTURE_DIR/$(basename "$FIXTURE")"
+
+echo "Configuring Buoy camera image source:"
+echo "  $FIXTURE_PATH"
+buoycam source image "$FIXTURE_PATH"
+
+echo
+echo "Running Argent inventory camera flow."
+if [[ "$MODE" == "baseline" ]]; then
+  echo "Mode: create/update reviewed visual baseline"
+  argent flow run inventory-camera \
+    --platform ios \
+    --update-baselines \
+    --output .argent/artifacts
+else
+  echo "Mode: compare against committed/local baseline"
+  argent flow run inventory-camera \
+    --platform ios \
+    --output .argent/artifacts
+fi

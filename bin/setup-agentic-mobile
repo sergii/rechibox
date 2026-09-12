@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+if [[ "$(uname -s)" != "Darwin" ]]; then
+  echo "Argent iOS setup requires macOS for the Simulator workflow." >&2
+  exit 1
+fi
+
+for command_name in node npm npx xcrun; do
+  if ! command -v "$command_name" >/dev/null 2>&1; then
+    echo "Missing required command: $command_name" >&2
+    exit 1
+  fi
+done
+
+echo "Setting up Argent for this machine/workspace."
+echo "The installer may detect your editor and register the MCP server there."
+echo "Generated editor/MCP files are treated as local workspace state and are ignored by git in this repo."
+echo
+
+npx --yes @swmansion/argent@latest init --global
+
+echo
+echo "Argent setup finished."
+echo "Run 'npm run agent:doctor' to inspect the local toolchain."
+echo "Run 'npm run simulator:ios' to build and launch Rechibox in the iOS Simulator."
+echo "Buoy is optional and external to the app. Use it when the inventory camera needs a deterministic image/video feed."

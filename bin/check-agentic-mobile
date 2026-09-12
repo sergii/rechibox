@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+required_line() {
+  local label="$1"
+  local command_name="$2"
+  if command -v "$command_name" >/dev/null 2>&1; then
+    printf 'OK   %-20s %s\n' "$label" "$(command -v "$command_name")"
+  else
+    printf 'MISS %-20s %s\n' "$label" "$command_name"
+  fi
+}
+
+optional_line() {
+  local label="$1"
+  local command_name="$2"
+  if command -v "$command_name" >/dev/null 2>&1; then
+    printf 'OK   %-20s %s\n' "$label" "$(command -v "$command_name")"
+  else
+    printf 'OPT  %-20s %s\n' "$label" "$command_name"
+  fi
+}
+
+echo "Rechibox agentic mobile doctor"
+echo
+required_line "Node" node
+required_line "npm" npm
+required_line "Xcode simctl" xcrun
+required_line "Ruby" ruby
+required_line "Argent" argent
+optional_line "Buoy camera" buoycam
+optional_line "agent-device" agent-device
+optional_line "Maestro" maestro
+
+echo
+if command -v ruby >/dev/null 2>&1; then
+  if ruby -e 'gem "json", "< 3"; gem "activesupport", ">= 7", "< 8"; gem "cocoapods", "= 1.17.0"' >/dev/null 2>&1; then
+    echo "OK   CocoaPods gem set    CocoaPods 1.17.0 / ActiveSupport < 8 / JSON < 3"
+  else
+    echo "MISS CocoaPods gem set    install the pinned Ruby gems before the first Simulator native build"
+  fi
+fi
+
+echo
+if command -v xcrun >/dev/null 2>&1; then
+  echo "Booted Apple simulators:"
+  BOOTED="$(xcrun simctl list devices booted | sed -n '/-- iOS/,/-- /p' | grep -E 'iPhone|iPad' || true)"
+  if [[ -n "$BOOTED" ]]; then
+    printf '%s\n' "$BOOTED"
+  else
+    echo "  none"
+  fi
+fi
+
+echo
+if command -v argent >/dev/null 2>&1; then
+  echo "Argent version: $(argent --version 2>/dev/null || echo unknown)"
+fi
+
+if command -v buoycam >/dev/null 2>&1; then
+  echo
+  echo "Buoy camera diagnostics:"
+  buoycam diagnose || true
+fi
+
+echo
+cat <<'EOF'
+Legend: OK = available, MISS = required path missing, OPT = optional integration not installed.
+
+Recommended Rechibox loop:
+  1. npm run simulator:ios
+  2. Use Argent from the coding agent to inspect/control the running app.
+  3. For camera flows, select an image/video in Buoy Desktop, or set RECHIBOX_CAMERA_FIXTURE when buoycam is available.
+  4. Use a physical iPhone only for final camera, signing, device-only, and performance validation.
+EOF

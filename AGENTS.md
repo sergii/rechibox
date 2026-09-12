@@ -1,6 +1,6 @@
 # Expo HAS CHANGED
 
-Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before writing any code.
+Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before writing version-sensitive Expo code.
 
 # Rechibox mobile engineering contract
 
@@ -10,77 +10,98 @@ Playbook repository: https://github.com/sergii/mobile-engineering-playbook
 Playbook version: v0.4.4
 Playbook revision: 4901486d9373c5b895bf466d9438eec9b08b89ed
 
-The exact revision is the reproducible baseline; the version is the human-readable release label. Read shared documents at that revision, never silently at `main`. Upgrade deliberately after reviewing the changes. Prefer a local checkout when its revision is verified.
-
-This contract merges the [product template at the adopted revision](https://github.com/sergii/mobile-engineering-playbook/blob/4901486d9373c5b895bf466d9438eec9b08b89ed/templates/product/AGENTS.md) with the Expo-generated instructions above.
+The revision is the reproducible baseline. Read shared guidance at that revision, not silently at `main`, and upgrade deliberately.
 
 ## Product context
 
 Rechibox is a self-storage / smart-storage product for the Ukrainian market.
 
-Archetype: none
 Target platforms: iOS, Android
 Native ownership: CNG / Prebuild
 
-The `/inventory` camera workflow explicitly uses the `camera-operational` archetype as task-scoped guidance only. It does not select that archetype for the whole product.
+The `/inventory` workflow uses the `camera-operational` archetype as task-scoped guidance. It is not the archetype for the whole product.
 
-## Project baseline and commands
+## Baseline and commands
 
-Generated with `npx create-expo-app@latest .` using the default SDK 57 template, Expo Router, React Native 0.86.3, React 19.2.3, and strict TypeScript. Preserve Expo-supported version alignment and the New Architecture.
+Expo SDK 57, Expo Router, React Native 0.86.3, React 19.2.3, strict TypeScript, New Architecture.
 
-Use Node 22.23.1 (`.nvmrc`) and npm 10.9.8 (`package.json`'s `packageManager`), the verified bootstrap toolchain. create-expo-app 4.0.0 is incompatible with npm 12's `npm pack --json` output format. Keep `package-lock.json` as the dependency lockfile.
+Use Node 22.23.1 (`.nvmrc`) and npm 10.9.8 (`packageManager`). Keep `package-lock.json` authoritative.
 
 ```text
 install: npm ci
 start: npm start
 typecheck: npm run typecheck
 lint: npm run lint
-test: none (no automated test suite yet)
 ios simulator / Expo Go: npm run ios
-android emulator / Expo Go: npm run android
+native iOS Simulator product build: npm run simulator:ios
+clean native iOS Simulator rebuild: npm run simulator:ios:clean
+agent tooling setup: npm run agent:setup
+agent tooling diagnostics: npm run agent:doctor
 physical-device diagnostics: npm run device:check
 physical iPhone / Expo Go: npm run iphone
-physical iPhone native build: npm run iphone:native
-web: npm run web (optional preview, not a product target)
-dependency compatibility: npx expo install --check
-project diagnostics: npx expo-doctor
+physical iPhone native dev build: npm run iphone:native
+physical iPhone standalone Release: npm run iphone:release
+web: npm run web
+EAS readiness: npm run eas:check
 ```
 
-`ios`, `android`, and `iphone` use Expo Go and do not build a product-specific native binary. `iphone:native` uses CNG plus `expo run:ios --device`; it may generate ignored `ios/` output locally, build with Xcode, install the app on a physical device, and verify native/config-plugin behavior. Local Apple signing credentials remain machine-local and must not be committed.
+`ios`, `android`, and `iphone` use Expo Go and cannot exercise product-specific native modules such as React Native ExecuTorch. Use `simulator:ios` for the preferred native day-to-day loop and `iphone:native`/`iphone:release` for physical-device validation.
+
+The native Simulator loop does not require an Apple Developer Program membership. Cloud/internal iOS distribution can require paid Apple signing capabilities, so do not make day-to-day verification depend on EAS iOS builds.
+
+See `docs/agentic-mobile-testing.md` for the current verification strategy.
 
 ## Always follow
 
-- The product-specific rules in this repository, current task requirements, and the shared playbook's core safety rules.
-- Product-specific documented rules override generic shared examples.
-- Preserve useful Expo-generated instructions and consult SDK 57 documentation for version-sensitive behavior.
+- Product-specific rules here and current task requirements override generic playbook examples.
+- Preserve Expo-supported dependency alignment and consult SDK 57 docs for version-sensitive behavior.
+- Keep generated `ios/` and `android/` ignored. `app.json` and config plugins are the native source of truth.
+- Never commit certificates, provisioning profiles, Apple credentials, device IDs, access tokens, keychain material, or machine-specific signing state.
+- Keep code comments in English.
+- Prefer the smallest verification layer that can falsify the change, then escalate when native behavior matters.
 
-## Load shared guidance only when relevant
+## Relevant shared playbook guidance
 
-All paths below refer to the playbook repository at the recorded revision:
+Load only what the task needs:
 
-- Architecture/startup/unfamiliar mobile decisions → `MOBILE_ENGINEERING_PLAYBOOK.md`.
-- New or cross-cutting dependencies → `guides/decision-ladder.md`.
-- Suspicious generated/overbuilt code → `guides/agent-failure-modes.md`.
-- Native config, auth routing/security boundaries, storage, safe areas, keyboard, OTA/native compatibility, lifecycle-sensitive behavior, `ios/` or `android/` → `guides/platform-native-rules.md`.
-- Finishing a meaningful feature slice → `guides/vertical-slice-checklist.md`.
-- Explicitly selected archetype → its README/YAML/slices when relevant.
-
-Do not load every shared document for every small task. Read product/domain documents when they exist and are relevant; do not invent missing domain contracts.
+- architecture/startup decisions -> `MOBILE_ENGINEERING_PLAYBOOK.md`
+- dependencies -> `guides/decision-ladder.md`
+- agent-generated overbuilding -> `guides/agent-failure-modes.md`
+- native config, storage, safe areas, keyboard, OTA/native compatibility, lifecycle -> `guides/platform-native-rules.md`
+- finishing a meaningful feature slice -> `guides/vertical-slice-checklist.md`
+- explicitly selected archetype -> its README/YAML/slices
 
 ## Product-specific rules
 
-- `/` remains the lightweight customer entry point. Grow product behavior through thin vertical slices, and do not add infrastructure ahead of demonstrated product needs.
-- Use React Native primitives and `StyleSheet`. Keep files close to the implemented behavior; do not add speculative feature folders or layers.
-- Add UI frameworks, styling systems, state/query libraries, persistence, auth, analytics, animations, or other infrastructure only for a concrete requirement.
-- Check dependency and peer-dependency requirements before cleanup. SDK 57's Router brings `@expo/ui`, glass/symbol helpers, and drawer/gesture/animation dependencies transitively; their installation is not adoption of their APIs by this product.
-- The headerless home screen owns all four safe-area edges through `react-native-safe-area-context`; Expo Router provides the safe-area context. Routed screens with a native stack header should own only the remaining safe-area edges. Keep text scalable and system bars legible in light and dark appearance.
-- `app.json` and config plugins are the native source of truth. Keep generated `ios/` and `android/` out of source control; do not leave persistent changes only in generated native files.
-- Native identity is display name `Rechibox`, slug `rechibox`, scheme `rechibox`, iOS bundle identifier `com.sergii.rechibox`, and Android package `com.sergii.rechibox`. Do not change bundle/package identifiers casually: changing them changes application identity. Production domain/API URL, EAS project ID, store records, and release signing/distribution policy remain unset until explicitly decided.
-- Do not commit developer certificates, provisioning profiles, keychain data, Apple credentials, device IDs, or machine-specific Xcode signing state. Native development builds may use locally available Xcode automatic signing.
-- `expo-camera` is the product-owned camera dependency for the `/inventory` slice. The camera config plugin owns the product camera permission string; audio recording and barcode scanning are not part of this slice.
-- Only mount the live camera while the inventory flow needs it and the application is active. Re-check camera permission after returning to the foreground, and model denied permission, camera mount failure, capture failure, and retry states explicitly.
-- The current AI recognition step is intentionally a fixed local mock. It must be labeled as mock in the UI and docs, must not claim that the photo was analyzed, and must not imply upload, backend persistence, or real model inference.
-- Recognition confidence and low-confidence correction are part of the current inventory interaction shape. User confirmation is local demo state only and does not mutate backend/domain state.
-- Expo icons/splash assets remain development placeholders. Real AI recognition, backend contracts, accounts, persistent inventory, offline sync, and release policy remain deferred.
-- Keep code comments in English. Do not infer booking/resource models or claim offline synchronization before product requirements define them.
-- Run strict TypeScript, lint, and relevant Expo checks. Inspect the running app on targeted platforms and state verification limits honestly. Camera-critical behavior should be exercised on a physical device. Expo Go can verify the JavaScript camera flow; use the native physical-device runner when config-plugin/native behavior matters.
+- `/` remains the lightweight customer entry point. Grow behavior through thin vertical slices; do not add infrastructure ahead of demonstrated needs.
+- Shared UI primitives are source-owned AniUI/Uniwind components under `src/components/ui`. Domain-specific camera/viewfinder/detection layout may use React Native primitives and `StyleSheet` where that is clearer.
+- Do not casually add state/query/persistence/analytics frameworks. Add dependencies only for a concrete requirement.
+- Keep safe-area ownership explicit. Headerless screens own the required edges; routed screens with a native stack header should not double-apply top insets.
+- Native identity is display name `Rechibox`, slug `rechibox`, scheme `rechibox`, iOS bundle identifier `com.sergii.rechibox`, Android package `com.sergii.rechibox`.
+- `expo-camera` owns capture for `/inventory`. Audio recording and barcode scanning are not part of the current inventory slice.
+- Only mount the live camera while needed and while the app is active. Model permission denied, camera mount failure, capture failure, model download failure, inference failure, and retry states explicitly.
+- `/inventory` performs real local object detection. The current detector is `YOLO26 XLARGE 640 · XNNPACK FP32` through `react-native-executorch`, with Skia used to obtain image pixels. Do not describe this path as a mock.
+- Recognition is local. Do not claim image upload or backend persistence unless those behaviors are actually implemented.
+- COCO object detection is closed-vocabulary. A miss for an object outside the model vocabulary is not automatically a UI bug. Keep detector quality evaluation separate from interaction correctness.
+- Recognition confidence, include/exclude, correction, and confirmation are part of the inventory interaction. Persisted inventory/backend semantics remain separate product work.
+- The first model use may download model assets. Distinguish model download latency from inference latency in diagnostics.
+
+## Agentic verification policy
+
+The preferred development loop is native iOS Simulator + Argent. Buoy Simulator Camera may provide deterministic image/video input to `expo-camera` without product code changes.
+
+When Argent is configured, agents should use it to inspect the running app, act through semantic/accessibility targets, collect screenshots, and inspect logs/network evidence. Do not add brittle `testID` values merely to satisfy automation when stable accessibility semantics already identify the element.
+
+Use this verification order when applicable:
+
+1. `npm run typecheck` and `npm run lint`.
+2. `npm run simulator:ios` for native UI/integration changes.
+3. Use Argent to exercise and inspect the changed flow.
+4. For camera flows, use a deterministic Buoy image/video fixture when available.
+5. Use a physical iPhone for final real-camera behavior, signing/device-only behavior, and performance/thermal/hardware-acceleration validation.
+
+Simulator timing is not a proxy for iPhone performance, CoreML/ANE behavior, thermals, memory pressure, or real optical camera behavior. State verification limits explicitly.
+
+`agent-device` is an optional secondary agent QA/evidence tool. Maestro may be added later for a small number of durable smoke/regression flows. Avoid building a large selector-heavy E2E suite during rapid UI iteration.
+
+For web-compatible UI/content work, React Native Web + Storybook + Playwright/MSW is the preferred future fast layer, but it should not be introduced until a concrete slice needs it.

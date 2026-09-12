@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+fail() {
+  echo "simulator: $*" >&2
+  exit 1
+}
+
+if [[ "$(uname -s)" != "Darwin" ]]; then
+  fail "the iOS Simulator loop requires macOS with Xcode."
+fi
+
+for command_name in node npm npx xcrun open ruby; do
+  command -v "$command_name" >/dev/null 2>&1 || fail "missing required command: $command_name"
+done
+
+EXPECTED_NODE="$(tr -d 'v[:space:]' < .nvmrc)"
+EXPECTED_NPM="$(sed -n 's/.*\"packageManager\": \"npm@\([^\"]*\)\".*/\1/p' package.json)"
+ACTUAL_NODE="$(node -v 2>/dev/null | sed 's/^v//' || true)"
+ACTUAL_NPM="$(npm -v 2>/dev/null || true)"
+
+if [[ "$ACTUAL_NODE" != "$EXPECTED_NODE" || "$ACTUAL_NPM" != "$EXPECTED_NPM" ]]; then
+  fail "expected Node $EXPECTED_NODE / npm $EXPECTED_NPM; found Node ${ACTUAL_NODE:-missing} / npm ${ACTUAL_NPM:-missing}."
+fi
+
+if [[ "${RECHIBOX_SIMULATOR_CLEAN:-0}" == "1" ]]; then
+  echo "Removing generated ios/ so Expo can regenerate native state from app.json and config plugins."
+  rm -rf ios
+fi
+
+BOOTED_IPHONE="$(xcrun simctl list devices booted | awk '/iPhone/ { print; exit }')"
+if [[ -z "$BOOTED_IPHONE" ]]; then
+  echo "No booted iPhone Simulator found. Opening Simulator.app..."
+  open -a Simulator
+
+  for _ in {1..60}; do
+    BOOTED_IPHONE="$(xcrun simctl list devices booted | awk '/iPhone/ { print; exit }')"
+    [[ -n "$BOOTED_IPHONE" ]] && break
+    sleep 1
+  done
+fi
+
+[[ -n "$BOOTED_IPHONE" ]] || fail "no iPhone Simulator booted after 60 seconds. Boot one in Simulator.app and retry."
+
+echo "Using simulator: $BOOTED_IPHONE"
+
+CAMERA_FIXTURE="${RECHIBOX_CAMERA_FIXTURE:-}"
+if [[ -n "$CAMERA_FIXTURE" ]]; then
+  [[ -f "$CAMERA_FIXTURE" ]] || fail "camera fixture does not exist: $CAMERA_FIXTURE"
+
+  if command -v buoycam >/dev/null 2>&1; then
+    echo "Configuring Buoy Simulator Camera from fixture: $CAMERA_FIXTURE"
+    buoycam source image "$CAMERA_FIXTURE"
+  else
+    fail "RECHIBOX_CAMERA_FIXTURE is set, but buoycam is not installed. Open Buoy Desktop and select the image manually, or install its CLI before retrying."
+  fi
+elif command -v buoycam >/dev/null 2>&1; then
+  echo "Buoy camera CLI detected. Current diagnostics:"
+  buoycam diagnose || true
+else
+  echo "Buoy camera CLI not detected. The app can still run; the Simulator camera will remain unavailable unless Buoy Desktop is configured."
+fi
+
+TMP_DIR="$(mktemp -d)"
+RESTORE_PACKAGE_FILES=0
+cleanup() {
+  if [[ "$RESTORE_PACKAGE_FILES" -eq 1 ]]; then
+    cp "$TMP_DIR/package.json" package.json
+    if [[ -f "$TMP_DIR/package-lock.json" ]]; then
+      cp "$TMP_DIR/package-lock.json" package-lock.json
+    fi
+  fi
+  rm -rf "$TMP_DIR"
+}
+trap cleanup EXIT INT TERM
+
+if [[ ! -d ios ]]; then
+  echo
+  echo "Generating the native iOS project with CNG without running CocoaPods yet."
+  cp package.json "$TMP_DIR/package.json"
+  if [[ -f package-lock.json ]]; then
+    cp package-lock.json "$TMP_DIR/package-lock.json"
+  fi
+  RESTORE_PACKAGE_FILES=1
+  npx expo prebuild --platform ios --no-install
+  cp "$TMP_DIR/package.json" package.json
+  if [[ -f "$TMP_DIR/package-lock.json" ]]; then
+    cp "$TMP_DIR/package-lock.json" package-lock.json
+  fi
+  RESTORE_PACKAGE_FILES=0
+fi
+
+echo
+echo "Installing Pods with the Ruby 3.4-compatible CocoaPods gem set."
+echo "Pinned for this repo: CocoaPods 1.17.0, ActiveSupport < 8, JSON < 3."
+if ! (
+  cd ios
+  ruby -e '
+    gem "json", "< 3"
+    gem "activesupport", ">= 7", "< 8"
+    gem "cocoapods", "= 1.17.0"
+    load Gem.bin_path("cocoapods", "pod", "1.17.0")
+  ' -- install --repo-update
+); then
+  cat >&2 <<'EOF'
+
+The pinned CocoaPods gem set is unavailable or pod install failed.
+If the gems are missing, install them once with:
+  gem install json -v '< 3' --no-document
+  gem install activesupport -v '>= 7, < 8' --no-document
+  gem install cocoapods -v 1.17.0 --no-document
+Then rerun: npm run simulator:ios
+EOF
+  exit 1
+fi
+
+echo
+echo "Building and launching the native Expo development app on the iOS Simulator."
+echo "Pods are already synchronized, so Expo is run with --no-install to avoid the incompatible default pod path."
+echo "This path does not require an Apple Developer Program membership."
+echo "Keep this terminal running so Metro can serve Fast Refresh updates."
+echo
+
+exec npx expo run:ios --no-install
