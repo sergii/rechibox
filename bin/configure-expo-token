@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO="sergii/rechibox"
+TOKEN_URL="https://expo.dev/settings/access-tokens"
+
+if ! command -v gh >/dev/null 2>&1; then
+  echo "GitHub CLI (gh) is required to store EXPO_TOKEN securely."
+  echo "Create the token at: $TOKEN_URL"
+  echo "Then add it as the repository Actions secret EXPO_TOKEN."
+  exit 1
+fi
+
+if ! gh auth status >/dev/null 2>&1; then
+  echo "GitHub CLI is not authenticated. Starting gh auth login..."
+  gh auth login
+fi
+
+if command -v open >/dev/null 2>&1; then
+  open "$TOKEN_URL" >/dev/null 2>&1 || true
+fi
+
+echo "Create an Expo personal access token in the browser."
+read -r -s -p "Paste the Expo token here (input hidden): " EXPO_TOKEN_VALUE
+echo
+
+if [ -z "$EXPO_TOKEN_VALUE" ]; then
+  echo "Token was empty. Nothing changed."
+  exit 1
+fi
+
+printf '%s' "$EXPO_TOKEN_VALUE" | gh secret set EXPO_TOKEN --repo "$REPO"
+unset EXPO_TOKEN_VALUE
+
+echo "EXPO_TOKEN is configured for $REPO."
