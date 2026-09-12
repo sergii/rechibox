@@ -26,3 +26,11 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+      - name: Verify EAS configuration when enabled
+        run: |
+          if node -e "const p=require('./package.json'); process.exit(p.dependencies?.['expo-updates'] ? 0 : 1)"; then
+            npm run eas:check
+          else
+            echo "EAS Update is not bootstrapped yet; configuration check skipped."
+          fi
