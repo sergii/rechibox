@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+fail() {
+  echo "release: $*" >&2
+  exit 1
+}
+
+if [[ "$(uname -s)" != "Darwin" ]]; then
+  fail "iPhone release builds require macOS with Xcode."
+fi
+
+EXPECTED_NODE="$(tr -d 'v[:space:]' < .nvmrc)"
+EXPECTED_NPM="$(sed -n 's/.*\"packageManager\": \"npm@\([^\"]*\)\".*/\1/p' package.json)"
+ACTUAL_NODE="$(node -v 2>/dev/null | sed 's/^v//' || true)"
+ACTUAL_NPM="$(npm -v 2>/dev/null || true)"
+
+if [[ "$ACTUAL_NODE" != "$EXPECTED_NODE" || "$ACTUAL_NPM" != "$EXPECTED_NPM" ]]; then
+  fail "expected Node $EXPECTED_NODE / npm $EXPECTED_NPM; found Node ${ACTUAL_NODE:-missing} / npm ${ACTUAL_NPM:-missing}."
+fi
+
+for command in xcodebuild xcrun security ruby; do
+  command -v "$command" >/dev/null 2>&1 || fail "missing required command: $command"
+done
+
+SIGNING_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk '/\"Apple Development:/ { print; exit }')"
+[[ -n "$SIGNING_IDENTITY" ]] || fail "no valid Apple Development signing identity was found in the login keychain."
+
+BUNDLE_ID="$(node -e "const app=require('./app.json'); process.stdout.write(app.expo?.ios?.bundleIdentifier || '')")"
+[[ -n "$BUNDLE_ID" ]] || fail "app.json does not define expo.ios.bundleIdentifier."
+
+npm run typecheck
+npm run lint
+
+TMP_DIR="$(mktemp -d)"
+RESTORE_PACKAGE_FILES=0
+cleanup() {
+  if [[ "$RESTORE_PACKAGE_FILES" -eq 1 ]]; then
+    cp "$TMP_DIR/package.json" package.json
+    if [[ -f "$TMP_DIR/package-lock.json" ]]; then
+      cp "$TMP_DIR/package-lock.json" package-lock.json
+    fi
+  fi
+  rm -rf "$TMP_DIR"
+}
+trap cleanup EXIT INT TERM
+
+DEVICES_JSON="$TMP_DIR/devices.json"
+if ! xcrun devicectl list devices --json-output "$DEVICES_JSON" --timeout 5 >/dev/null 2>&1; then
+  fail "CoreDevice could not enumerate Apple devices."
+fi
+
+DEVICE_LINES="$(ruby -rjson -e '
+  data = JSON.parse(File.read(ARGV.fetch(0)))
+  devices = data.dig("result", "devices") || []
+
+  devices.each do |device|
+    hardware = device["hardwareProperties"] || {}
+    properties = device["deviceProperties"] || {}
+    connection = device["connectionProperties"] || {}
+
+    next unless hardware["reality"] == "physical"
+    next unless ["iOS", "xrOS"].include?(hardware["platform"])
+    next unless connection["pairingState"] == "paired"
+    next if connection["tunnelState"] == "unavailable"
+
+    fields = [
+      hardware["udid"],
+      properties["name"],
+      hardware["marketingName"],
+      connection["transportType"]
+    ].map { |value| value.to_s.gsub("\t", " ") }
+
+    puts fields.join("\t")
+  end
+' "$DEVICES_JSON")"
+
+DEVICE_COUNT="$(printf '%s\n' "$DEVICE_LINES" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')"
+[[ "$DEVICE_COUNT" != "0" ]] || fail "no available paired physical iPhone/iPad was found. Unlock the phone, enable Developer Mode, and connect it first."
+
+echo "Rechibox standalone Release build"
+echo "Bundle identifier: $BUNDLE_ID"
+echo "Signing identity: $SIGNING_IDENTITY"
+echo
+echo "Available physical Apple devices:"
+printf '%s\n' "$DEVICE_LINES" | awk -F '\t' '{ printf "  %s — %s (%s, %s)\n", $2, $3, $1, $4 }'
+echo
+
+if [[ ! -d ios ]]; then
+  echo "Generating the iOS native project with CNG."
+  cp package.json "$TMP_DIR/package.json"
+  if [[ -f package-lock.json ]]; then
+    cp package-lock.json "$TMP_DIR/package-lock.json"
+  fi
+  RESTORE_PACKAGE_FILES=1
+  npx expo prebuild --platform ios --no-install
+  cp "$TMP_DIR/package.json" package.json
+  if [[ -f "$TMP_DIR/package-lock.json" ]]; then
+    cp "$TMP_DIR/package-lock.json" package-lock.json
+  fi
+  RESTORE_PACKAGE_FILES=0
+fi
+
+if [[ ! -d ios/Pods || ! -f ios/Podfile.lock ]]; then
+  echo "Installing CocoaPods with the Ruby 3.4-compatible gem set."
+  (
+    cd ios
+    ruby -e '
+      gem "json", "< 3"
+      gem "activesupport", ">= 7", "< 8"
+      gem "cocoapods", "= 1.17.0"
+      load Gem.bin_path("cocoapods", "pod", "1.17.0")
+    ' -- install --repo-update
+  )
+else
+  echo "Using existing ios/Pods and Podfile.lock."
+fi
+
+echo
+echo "Building Release: JavaScript and assets will be bundled inside the app; Metro is not required after installation."
+
+if [[ "$DEVICE_COUNT" -gt 1 ]]; then
+  npx expo run:ios --configuration Release --device --no-install --no-bundler
+else
+  FIRST_DEVICE="$(printf '%s\n' "$DEVICE_LINES" | head -n 1)"
+  IFS=$'\t' read -r DEVICE_UDID DEVICE_NAME DEVICE_MODEL DEVICE_TRANSPORT <<< "$FIRST_DEVICE"
+  [[ -n "$DEVICE_UDID" ]] || fail "could not resolve the hardware UDID."
+
+  echo "Installing on: $DEVICE_NAME ($DEVICE_MODEL)"
+  npx expo run:ios \
+    --configuration Release \
+    --device "$DEVICE_UDID" \
+    --no-install \
+    --no-bundler
+fi
+
+echo
+echo "Release build installed. You can now quit Metro, disconnect the Mac, and launch Rechibox directly from the iPhone home screen."
+echo "Note: the ExecuTorch model is still downloaded/cached separately on first use; bundling the .pte model is a separate offline-first step."
