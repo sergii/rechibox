@@ -50,7 +50,7 @@ if [[ "$(uname -s)" == "Darwin" && -x "$(command -v xcrun 2>/dev/null || true)" 
   DEVICETCL_RAW="$(xcrun devicectl list devices 2>/dev/null || true)"
   if [[ -n "$DEVICETCL_RAW" ]]; then
     IOS_PAIRED_DEVICES="$(printf '%s\n' "$DEVICETCL_RAW" | awk '/iPhone|iPad/ { print }')"
-    IOS_DEVICES="$(printf '%s\n' "$DEVICETCL_RAW" | awk '/iPhone|iPad/ && /available/ { print }')"
+    IOS_DEVICES="$(printf '%s\n' "$DEVICETCL_RAW" | awk '/iPhone|iPad/ && /[[:space:]]available([[:space:]]|$)/ { print }')"
     IOS_DETECTION_SOURCE="devicectl/CoreDevice"
   fi
 
