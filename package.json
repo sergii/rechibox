@@ -58,6 +58,10 @@
     "iphone": "bash ./bin/run-on-real-device ios",
     "iphone:native": "bash ./bin/run-native-iphone",
     "iphone:release": "bash ./bin/run-release-iphone",
+    "eas:bootstrap": "bash ./bin/bootstrap-eas",
+    "eas:check": "bash ./bin/check-eas-readiness",
+    "eas:update:preview": "npx eas-cli@latest update --channel preview --auto",
+    "eas:update:production": "npx eas-cli@latest update --channel production --auto",
     "web": "expo start --web",
     "lint": "expo lint"
   },
