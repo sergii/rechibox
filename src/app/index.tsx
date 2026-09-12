@@ -14,11 +14,9 @@ export default function HomeScreen() {
         <View accessible accessibilityLabel="Rechibox" accessibilityRole="image" style={styles.logo}>
           <RechiboxLogo color={colors.text} />
         </View>
-        <Text style={[styles.description, { color: colors.text }]}>
-          Простір для ваших речей.
-        </Text>
+        <Text style={[styles.description, { color: colors.text }]}>Простір для ваших речей.</Text>
         <Text style={[styles.note, { color: colors.text }]}>
-          Спробуйте вибрати бокс на демонстраційних даних. Це не бронювання.
+          Спробуйте демонстраційний вибір боксу або AI-інвентар із камерою. Бронювання та інвентар поки не зберігаються.
         </Text>
         <Pressable
           accessibilityRole="button"
@@ -27,9 +25,16 @@ export default function HomeScreen() {
             styles.button,
             { backgroundColor: colors.text, opacity: pressed ? 0.75 : 1 },
           ]}>
-          <Text style={[styles.buttonText, { color: colors.background }]}>
-            Переглянути варіанти
-          </Text>
+          <Text style={[styles.buttonText, { color: colors.background }]}>Переглянути варіанти</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push('/inventory')}
+          style={({ pressed }) => [
+            styles.secondaryButton,
+            { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
+          ]}>
+          <Text style={[styles.secondaryButtonText, { color: colors.text }]}>AI-інвентар з камерою</Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -67,6 +72,19 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   buttonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  secondaryButton: {
+    minHeight: 52,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  secondaryButtonText: {
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
