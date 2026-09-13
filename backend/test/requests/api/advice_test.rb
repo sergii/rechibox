@@ -5,6 +5,29 @@ class ApiAdviceTest < ActionDispatch::IntegrationTest
     ENV["ORGANIZED_RUNTIME_PATH"] = Rails.root.join("test/fixtures/organized-v1.jsonl").to_s
   end
 
+  test "raw message flows through extractor retrieval and context composition without a model call" do
+    message = "Третій день перекладаю коробки з підлоги на диван. У списку ще є речі, які вже продав."
+
+    post "/api/advice", params: { message:, limit: 2 }, as: :json
+
+    assert_response :success
+    body = response.parsed_body
+    assert_equal "model_free", body.fetch("mode")
+    assert_equal "0.1", body.dig("situation", "contract_version")
+    assert_equal message, body.dig("situation", "raw_input")
+    assert_empty body.dig("situation", "facts")
+    assert_equal "lexical-idf-prefix5-v0.1", body.dig("retrieval", "strategy")
+    assert_includes body.dig("retrieval", "candidates").map { |candidate| candidate.fetch("id") }, "ORG-PR-0001"
+    assert_equal body.dig("retrieval", "candidates").map { |candidate| candidate.fetch("id") },
+                 body.dig("context", "knowledge").map { |record| record.fetch("id") }
+  end
+
+  test "raw message rejects blank input" do
+    post "/api/advice", params: { message: "   " }, as: :json
+
+    assert_response :unprocessable_entity
+  end
+
   test "dry run ranks Organized knowledge and composes context without a model call" do
     situation = {
       contract_version: "0.1",
