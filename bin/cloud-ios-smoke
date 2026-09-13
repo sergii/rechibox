@@ -1,0 +1,245 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+REPO="sergii/rechibox"
+BUNDLE_ID="com.sergii.rechibox"
+NATIVE_SIM_VERSION="${RECHIBOX_NATIVE_SIM_VERSION:-0.1.0}"
+AGENT_DEVICE_VERSION="${RECHIBOX_AGENT_DEVICE_VERSION:-0.21.1}"
+HOLD_MINUTES="${RECHIBOX_CLOUD_HOLD_MINUTES:-5}"
+READY_TIMEOUT_SECONDS="${RECHIBOX_CLOUD_READY_TIMEOUT_SECONDS:-3600}"
+LOCK_DIR="$ROOT/.git/rechibox-cloud-ios.lock"
+UP_LOG="$(mktemp -t rechibox-native-sim-up.XXXXXX)"
+CONNECT_LOG="$(mktemp -t rechibox-agent-connect.XXXXXX)"
+DEVICES_LOG="$(mktemp -t rechibox-agent-devices.XXXXXX)"
+RUN_ID=""
+SESSION=""
+CLEANUP_ENABLED=1
+
+cleanup() {
+  local exit_code=$?
+  set +e
+
+  if [[ -n "${SESSION:-}" ]]; then
+    agent-device close --session "$SESSION" >/dev/null 2>&1 || true
+    agent-device disconnect >/dev/null 2>&1 || true
+  fi
+
+  if [[ "${RECHIBOX_CLOUD_KEEP:-0}" != "1" && "${CLEANUP_ENABLED:-1}" == "1" ]]; then
+    native-sim down >/dev/null 2>&1 || true
+    if [[ -n "${RUN_ID:-}" ]]; then
+      gh run cancel "$RUN_ID" --repo "$REPO" >/dev/null 2>&1 || true
+    fi
+  fi
+
+  rm -f "$UP_LOG" "$CONNECT_LOG" "$DEVICES_LOG"
+  rmdir "$LOCK_DIR" >/dev/null 2>&1 || true
+  exit "$exit_code"
+}
+trap cleanup EXIT INT TERM
+
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+  echo "cloud:ios is already running from this checkout." >&2
+  exit 2
+fi
+
+if ! command -v gh >/dev/null 2>&1; then
+  echo "Missing GitHub CLI (gh)." >&2
+  exit 2
+fi
+
+if ! gh auth status >/dev/null 2>&1; then
+  echo "GitHub CLI is not authenticated. Run: gh auth login" >&2
+  exit 2
+fi
+
+if [[ -n "$(git status --porcelain)" ]]; then
+  echo "Working tree is not clean. Commit/stash changes before starting a billed cloud run." >&2
+  exit 2
+fi
+
+ensure_global_tool() {
+  local command_name="$1"
+  local package_name="$2"
+  local wanted_version="$3"
+  local current_version=""
+
+  if command -v "$command_name" >/dev/null 2>&1; then
+    current_version="$("$command_name" --version 2>/dev/null | head -1 | tr -d 'v' || true)"
+  fi
+
+  if [[ "$current_version" != "$wanted_version" ]]; then
+    echo "Installing $package_name@$wanted_version..."
+    npm install -g "$package_name@$wanted_version"
+  else
+    echo "OK $command_name $current_version"
+  fi
+}
+
+echo "== Rechibox cloud iOS smoke =="
+echo "Policy: one native-sim run, cheap local checks first, automatic cleanup."
+echo
+
+ensure_global_tool native-sim native-sim "$NATIVE_SIM_VERSION"
+ensure_global_tool agent-device agent-device "$AGENT_DEVICE_VERSION"
+
+if command -v mise >/dev/null 2>&1; then
+  PROJECT_NPM=(mise exec node@22.23.1 -- npm)
+else
+  PROJECT_NPM=(npm)
+fi
+
+echo
+echo "Running cheap checks before allocating macOS..."
+"${PROJECT_NPM[@]}" run typecheck
+"${PROJECT_NPM[@]}" run lint
+
+echo
+echo "Stopping stale native-sim sessions so only one billed run can exist..."
+native-sim down >/dev/null 2>&1 || true
+
+cancel_runs_with_status() {
+  local status="$1"
+  local run_id
+  while IFS= read -r run_id; do
+    [[ -z "$run_id" ]] && continue
+    echo "Cancelling stale $status run $run_id"
+    gh run cancel "$run_id" --repo "$REPO" >/dev/null 2>&1 || true
+  done < <(
+    gh run list \
+      --repo "$REPO" \
+      --workflow native-sim.yml \
+      --status "$status" \
+      --limit 20 \
+      --json databaseId \
+      --jq '.[].databaseId' 2>/dev/null || true
+  )
+}
+
+cancel_runs_with_status queued
+cancel_runs_with_status in_progress
+
+for _ in $(seq 1 30); do
+  active="$(
+    {
+      gh run list --repo "$REPO" --workflow native-sim.yml --status queued --limit 20 --json databaseId --jq '.[].databaseId'
+      gh run list --repo "$REPO" --workflow native-sim.yml --status in_progress --limit 20 --json databaseId --jq '.[].databaseId'
+    } 2>/dev/null | sed '/^$/d' | wc -l | tr -d ' '
+  )"
+  [[ "$active" == "0" ]] && break
+  sleep 2
+done
+
+UP_ARGS=(up --agent)
+if native-sim up --help 2>&1 | grep -q -- '--minutes'; then
+  UP_ARGS+=(--minutes "$HOLD_MINUTES")
+fi
+
+echo
+echo "Starting exactly one native-sim run..."
+echo "Post-ready hold: ${HOLD_MINUTES}m. The command stops the run immediately after smoke verification."
+set +e
+native-sim "${UP_ARGS[@]}" 2>&1 \
+  | tee "$UP_LOG" \
+  | sed -E \
+      -e 's/(\?k=)[A-Za-z0-9_-]+/\1<redacted>/g' \
+      -e 's/(--daemon-auth-token[[:space:]]+)[^[:space:]]+/\1<redacted>/g'
+up_status=${PIPESTATUS[0]}
+set -e
+
+if [[ "$up_status" -ne 0 ]]; then
+  echo "native-sim failed before the smoke test could start." >&2
+  exit "$up_status"
+fi
+
+RUN_ID="$(grep -Eo 'actions/runs/[0-9]+' "$UP_LOG" | tail -1 | awk -F/ '{print $3}' || true)"
+BASE_URL="$(
+  grep -Eo -- '--daemon-base-url[[:space:]]+https://[^[:space:]]+' "$UP_LOG" \
+    | tail -1 \
+    | awk '{print $2}' || true
+)"
+AUTH_TOKEN="$(
+  grep -Eo -- '--daemon-auth-token[[:space:]]+[^[:space:]]+' "$UP_LOG" \
+    | tail -1 \
+    | awk '{print $2}' || true
+)"
+
+if [[ -z "$BASE_URL" || -z "$AUTH_TOKEN" ]]; then
+  echo "Could not parse the agent-device proxy credentials from native-sim output." >&2
+  exit 3
+fi
+
+export AGENT_DEVICE_DAEMON_BASE_URL="$BASE_URL"
+export AGENT_DEVICE_DAEMON_AUTH_TOKEN="$AUTH_TOKEN"
+
+echo
+echo "Configuring agent-device proxy..."
+agent-device connect proxy \
+  --daemon-base-url "$BASE_URL" \
+  --daemon-auth-token "$AUTH_TOKEN" \
+  2>&1 | tee "$CONNECT_LOG"
+
+SESSION="$(grep -Eo 'adc-[a-z0-9]+' "$CONNECT_LOG" | head -1 || true)"
+if [[ -z "$SESSION" ]]; then
+  echo "Could not read the agent-device session id." >&2
+  exit 3
+fi
+
+echo
+echo "Waiting for the remote app + agent-device proxy..."
+deadline=$((SECONDS + READY_TIMEOUT_SECONDS))
+while (( SECONDS < deadline )); do
+  if agent-device devices \
+      --platform ios \
+      --session "$SESSION" \
+      >"$DEVICES_LOG" 2>&1; then
+    cat "$DEVICES_LOG"
+    break
+  fi
+
+  if [[ -n "$RUN_ID" ]]; then
+    run_state="$(
+      gh run view "$RUN_ID" --repo "$REPO" \
+        --json status,conclusion \
+        --jq '[.status, (.conclusion // "")] | join(" ")' \
+        2>/dev/null || true
+    )"
+    if [[ "$run_state" == completed* ]]; then
+      echo "native-sim workflow ended before agent-device became ready: $run_state" >&2
+      gh run view "$RUN_ID" --repo "$REPO" || true
+      exit 4
+    fi
+  fi
+
+  printf '.'
+  sleep 20
+done
+echo
+
+if (( SECONDS >= deadline )); then
+  echo "Timed out waiting for the remote agent surface after ${READY_TIMEOUT_SECONDS}s." >&2
+  exit 5
+fi
+
+echo "Opening $BUNDLE_ID..."
+agent-device open "$BUNDLE_ID" \
+  --platform ios \
+  --relaunch \
+  --session "$SESSION"
+
+sleep 2
+
+echo
+echo "Interactive snapshot:"
+agent-device snapshot -i --session "$SESSION"
+
+echo
+echo "PASS: remote iOS Simulator + Rechibox + agent-device are working."
+if [[ "${RECHIBOX_CLOUD_KEEP:-0}" == "1" ]]; then
+  CLEANUP_ENABLED=0
+  echo "RECHIBOX_CLOUD_KEEP=1: leaving the remote session running."
+else
+  echo "Stopping the remote session now to avoid extra macOS minutes."
+fi
