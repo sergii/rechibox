@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-for command_name in native-sim agent-device; do
+for command_name in native-sim agent-device git gh; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     echo "Missing required command: $command_name" >&2
     echo "Run 'npm run experiment:native-sim:doctor' for setup guidance." >&2
@@ -23,11 +23,37 @@ EOF
   exit 2
 fi
 
-cat <<'EOF'
-Starting native-sim experiment.
+DEFAULT_BRANCH="$(gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name' 2>/dev/null || true)"
+CURRENT_BRANCH="$(git branch --show-current)"
+DEFAULT_BRANCH="${DEFAULT_BRANCH:-main}"
 
-In another terminal, after native-sim reports the proxy is ready, run:
-  agent-device connect proxy
+if ! gh api "repos/{owner}/{repo}/contents/.github/workflows/native-sim.yml?ref=${DEFAULT_BRANCH}" >/dev/null 2>&1; then
+  cat >&2 <<EOF
+native-sim 0.1.0 generated its workflow on '${CURRENT_BRANCH}', but GitHub only
+exposes workflow_dispatch when the workflow also exists on the default branch
+('${DEFAULT_BRANCH}'). The cloud session cannot start from this experiment branch yet.
+
+Bootstrap native-sim once on the default branch, which will add the generated
+native-sim workflow/gate there and start a cloud session:
+
+  git switch ${DEFAULT_BRANCH}
+  git pull
+  native-sim up --agent
+
+Then return to '${CURRENT_BRANCH}' for the experiment. Keeping the generated
+workflow on the default branch is required for later workflow_dispatch runs.
+EOF
+  exit 3
+fi
+
+cat <<'EOF'
+Starting native-sim experiment with the agent-device control surface enabled.
+
+Do not run 'agent-device connect proxy' until native-sim reports a live tunnel.
+agent-device 0.21.x needs the daemon base URL and auth token. Prefer the exact
+connect command printed by native-sim. If native-sim only prints the protected
+preview URL, the daemon base URL is the same origin plus /agent-device and the
+preview access key is also the daemon auth token.
 
 Phase-1 success criteria:
   - Rechibox launches remotely
@@ -40,4 +66,4 @@ Do not evaluate Buoy, camera input, YOLO accuracy, or simulator performance in t
 EOF
 
 echo
-exec native-sim up
+exec native-sim up --agent

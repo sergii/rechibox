@@ -62,6 +62,22 @@ npm install -g agent-device@latest
 
 `agent-device` is intentionally not fetched with mutable `npx -y ...@latest` during unattended agent execution. Use an installed/pinned binary.
 
+### Important native-sim 0.1.0 bootstrap constraint
+
+`native-sim up` generates `.github/workflows/native-sim.yml` and `.github/native-sim/gate.cjs`. GitHub only accepts `workflow_dispatch` for a workflow that exists on the repository default branch. Therefore the first native-sim bootstrap cannot live only on an experiment branch.
+
+If the doctor reports that the dispatch workflow is missing on `main`, bootstrap once from `main`:
+
+```bash
+git switch main
+git pull
+native-sim up --agent
+```
+
+This creates/pushes the generated native-sim workflow on the default branch and starts a cloud session. Keeping that generated workflow on the default branch is required for later dispatches from other refs. This is infrastructure only; it does not merge the AppLlama experiment into product code.
+
+For Rechibox, always enable native-sim's agent control surface with `--agent`. The generated workflow only starts the remote `agent-device proxy` when its `agent_device` input is true.
+
 ### Cost / experimental guard
 
 `native-sim` is new/experimental and hosts simulators through GitHub infrastructure. Public projects may be free under the project's model; private repositories can consume GitHub-hosted macOS Actions minutes. There has also been public concern that this usage pattern should be treated as an experiment with respect to GitHub's terms. Do not wire it into CI yet.
@@ -72,13 +88,32 @@ For that reason the repo wrapper refuses to start a cloud run unless you explici
 RECHIBOX_ALLOW_CLOUD_MACOS=1 npm run experiment:native-sim:up
 ```
 
-Then, in another terminal when the remote proxy is ready:
+The wrapper now starts:
 
 ```bash
-agent-device connect proxy
+native-sim up --agent
 ```
 
-From the connected agent/device session, use normal agent-device interaction to open `com.sergii.rechibox`, take an interactive snapshot, navigate through visible semantic targets, and capture a screenshot.
+### Connecting agent-device
+
+Do not run `agent-device connect proxy` before native-sim has successfully dispatched the workflow and reported a live tunnel. With agent-device 0.21.x, `connect proxy` requires the remote daemon URL and auth token unless another control plane has already populated them.
+
+Prefer the exact command/connection values printed by native-sim. The generated native-sim gate exposes the agent-device daemon at the same tunnel origin under `/agent-device` and uses the same access key as the bearer auth token. Conceptually:
+
+```bash
+agent-device connect proxy \
+  --daemon-base-url 'https://<tunnel>.trycloudflare.com/agent-device' \
+  --daemon-auth-token '<native-sim access key>'
+```
+
+After connecting:
+
+```bash
+agent-device open com.sergii.rechibox --platform ios --foreground
+agent-device snapshot -i
+```
+
+Then navigate using the returned semantic refs/selectors and capture evidence only after the app is in the expected state.
 
 ### Phase-1 acceptance criteria
 

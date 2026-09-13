@@ -33,10 +33,29 @@ else
   echo "  npm install -g agent-device@latest"
 fi
 
+if command -v gh >/dev/null 2>&1 && command -v git >/dev/null 2>&1; then
+  echo
+  DEFAULT_BRANCH="$(gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name' 2>/dev/null || true)"
+  DEFAULT_BRANCH="${DEFAULT_BRANCH:-main}"
+  CURRENT_BRANCH="$(git branch --show-current 2>/dev/null || true)"
+  printf 'INFO %-18s %s\n' "current branch" "${CURRENT_BRANCH:-unknown}"
+  printf 'INFO %-18s %s\n' "default branch" "$DEFAULT_BRANCH"
+  if gh api "repos/{owner}/{repo}/contents/.github/workflows/native-sim.yml?ref=${DEFAULT_BRANCH}" >/dev/null 2>&1; then
+    echo "OK   native-sim dispatch workflow exists on $DEFAULT_BRANCH"
+  else
+    echo "MISS native-sim dispatch workflow is not on $DEFAULT_BRANCH"
+    echo "     GitHub workflow_dispatch will reject native-sim from a non-default branch until it is bootstrapped there."
+  fi
+fi
+
 echo
 cat <<'EOF'
 This experiment intentionally does not auto-install or auto-run cloud tooling.
 native-sim uses remote macOS/GitHub-hosted simulator infrastructure. For a private
 repository that can consume billed GitHub Actions macOS minutes. Treat native-sim
 as experimental infrastructure, not the Rechibox default verification path.
+
+For the agent-controlled PoC, start native-sim with --agent. agent-device 0.21.x
+requires a daemon base URL/auth token for 'connect proxy'; wait for native-sim to
+create a live tunnel and use the connection values it prints.
 EOF
