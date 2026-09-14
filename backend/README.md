@@ -62,7 +62,7 @@ Configure provider credentials separately, for example `OPENAI_API_KEY`, `ANTHRO
 
 Enabling both RubyLLM situation extraction and RubyLLM answer generation performs two model calls per advice request. Leaving the defaults unchanged performs zero model calls, so CI and normal development do not spend model credits.
 
-## AI run tracing
+## AI run tracing and usage
 
 `Ai::TraceRecorder` records the causal inputs that produced an advice result without introducing a database yet.
 
@@ -76,15 +76,20 @@ AI_TRACE_STORE=jsonl
 AI_TRACE_PATH=tmp/ai-runs.jsonl
 ```
 
-Each trace has a stable UUID and `trace_version: "0.1"`, and captures:
+Trace format `0.2` captures the original input, Situation Model, retrieval provenance, final answer, per-stage timings, and model usage. The API also exposes the same `metrics` block even when trace persistence is disabled.
 
-- original raw input and extracted Situation Model;
-- retrieval strategy plus selected Organized IDs, revisions, and scores;
-- extractor mode/model/prompt version;
-- answer-generator mode/model/prompt version;
-- end-to-end latency;
-- final answer when one exists;
-- token and cost fields reserved as `null` until RubyLLM usage accounting is wired explicitly.
+Timings are measured independently for extraction, retrieval, context composition, answer generation, and the complete request. When RubyLLM exposes token usage, the extractor and answer generator record input/output tokens separately and aggregate them for the request.
+
+Pricing is deliberately not hardcoded because provider prices change. Estimated cost is populated only when explicit per-million-token rates are configured for the selected models:
+
+```sh
+AI_SITUATION_INPUT_USD_PER_1M_TOKENS=...
+AI_SITUATION_OUTPUT_USD_PER_1M_TOKENS=...
+AI_ANSWER_INPUT_USD_PER_1M_TOKENS=...
+AI_ANSWER_OUTPUT_USD_PER_1M_TOKENS=...
+```
+
+Without those rates, token counts can still be recorded while `estimated_cost_usd` remains `null`.
 
 The API exposes `trace_mode`, and when persistence is enabled it also returns `trace_id`. JSONL is a deliberately small persistence adapter for this spike, not the long-term database design. A later ActiveRecord/PostgreSQL implementation can replace it behind the same boundary.
 
@@ -99,7 +104,7 @@ curl -X POST http://localhost:3000/api/advice \
   }'
 ```
 
-When answer generation is disabled the response exposes `answer_mode: "disabled"` and omits `answer`. When enabled, the same endpoint additionally returns the final user-facing `answer` while keeping the situation, retrieval trace, and composed context observable.
+When answer generation is disabled the response exposes `answer_mode: "disabled"` and omits `answer`. When enabled, the same endpoint additionally returns the final user-facing `answer` while keeping the situation, retrieval trace, composed context, timings, and usage observable.
 
 Example dry-run request:
 
