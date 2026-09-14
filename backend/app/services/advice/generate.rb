@@ -30,7 +30,7 @@ module Advice
       started_monotonic = monotonic_now
 
       situation, extraction_latency_ms = measure do
-        @extractor.call(message: @message, history: @history)
+        @extractor.call(message: @message, history: @history, world_state: @world_state)
       end
 
       retrieval, retrieval_latency_ms = measure do
