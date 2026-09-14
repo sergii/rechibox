@@ -1,6 +1,9 @@
 module WorldState
   class ClarificationStore
     def self.default
+      Persistence.validate!
+      return ClarificationStores::ActiveRecord.new if Persistence.active_record?
+
       ClarificationStores::JsonDirectory.new
     end
 
