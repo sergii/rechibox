@@ -60,7 +60,7 @@ module WorldState
 
       def sync_entities(record, entities)
         desired_ids = entities.map { |entity| entity.fetch("id") }
-        record.world_entities.where.not(id: desired_ids).delete_all
+        delete_missing(record.world_entities, desired_ids)
 
         entities.each_with_index do |entity, position|
           attributes = {
@@ -77,7 +77,7 @@ module WorldState
 
       def sync_claims(record, claims)
         desired_ids = claims.map { |claim| claim.fetch("id") }
-        record.world_claims.where.not(id: desired_ids).delete_all
+        delete_missing(record.world_claims, desired_ids)
 
         claims.each_with_index do |claim, position|
           attributes = {
@@ -92,6 +92,10 @@ module WorldState
           }
           WorldClaim.upsert(attributes.merge(id: claim.fetch("id")), unique_by: :id)
         end
+      end
+
+      def delete_missing(relation, desired_ids)
+        desired_ids.empty? ? relation.delete_all : relation.where.not(id: desired_ids).delete_all
       end
     end
   end
