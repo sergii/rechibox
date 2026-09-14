@@ -5,6 +5,9 @@ Rails.application.routes.draw do
 
     resources :worlds, only: %i[create show] do
       post "resolve_entities", to: "worlds#resolve_entities", on: :member
+      get "clarifications", to: "worlds#clarifications", on: :member
+      get "clarifications/:clarification_id", to: "worlds#clarification", on: :member
+      post "clarifications/:clarification_id/answer", to: "worlds#answer_clarification", on: :member
       get "identity_reviews", to: "worlds#identity_reviews", on: :member
       post "identity_reviews", to: "worlds#review_identity", on: :member
       post "updates", to: "worlds#update_state", on: :member
