@@ -1,6 +1,9 @@
 module Conversations
   class TurnStore
     def self.default
+      Persistence.validate!
+      return TurnStores::ActiveRecord.new if Persistence.active_record?
+
       TurnStores::JsonDirectory.new
     end
 

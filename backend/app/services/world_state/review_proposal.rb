@@ -23,13 +23,17 @@ module WorldState
     def call
       raise ArgumentError, "unsupported proposal review action" unless ACTIONS.include?(@action)
 
+      Persistence.transaction { perform_review }
+    end
+
+    private
+
+    def perform_review
       proposal = @proposal_store.fetch(world_id: @world_id, id: @proposal_id)
       raise ArgumentError, "proposal is not pending" unless proposal.fetch("status") == "pending"
 
       @action == "accept" ? accept(proposal) : reject
     end
-
-    private
 
     def accept(proposal)
       world = @world_store.fetch(@world_id)

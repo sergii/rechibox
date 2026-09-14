@@ -1,0 +1,2 @@
+class ConversationTurnDocument < ApplicationRecord
+end

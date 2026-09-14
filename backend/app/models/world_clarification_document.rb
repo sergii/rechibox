@@ -1,0 +1,2 @@
+class WorldClarificationDocument < ApplicationRecord
+end
