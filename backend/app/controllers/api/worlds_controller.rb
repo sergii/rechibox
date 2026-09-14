@@ -24,6 +24,34 @@ module Api
       render json: { error: e.message }, status: :not_found
     end
 
+    def identity_reviews
+      world = WorldState::Store.default.fetch(params.require(:id))
+      render json: {
+        world_id: world.fetch("id"),
+        identity_reviews: Array(world["identity_reviews"])
+      }
+    rescue ArgumentError, KeyError => e
+      render json: { error: e.message }, status: :not_found
+    end
+
+    def review_identity
+      result = WorldState::ReviewIdentity.new(
+        world_id: params.require(:id),
+        decision: params.require(:decision),
+        canonical_entity_id: params[:canonical_entity_id],
+        alias_entity_id: params[:alias_entity_id],
+        left_entity_id: params[:left_entity_id],
+        right_entity_id: params[:right_entity_id],
+        reason: params[:reason]
+      ).call
+
+      render json: result
+    rescue ActionController::ParameterMissing, ArgumentError => e
+      render json: { error: e.message }, status: :unprocessable_entity
+    rescue KeyError => e
+      render json: { error: e.message }, status: :not_found
+    end
+
     def update_state
       result = WorldState::ApplyUpdate.new(
         world_id: params.require(:id),
