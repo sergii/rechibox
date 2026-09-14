@@ -2,7 +2,7 @@
 
 World Query is a deterministic semantic read layer over World State and the World Graph.
 
-It does not interpret natural language and does not call an LLM. Callers must provide one bounded intent and one durable entity ID.
+It does not interpret natural language and does not call an LLM. Callers must provide one bounded intent and one durable entity ID. Unsupported intents are rejected instead of being interpreted heuristically.
 
 ## Endpoint
 
