@@ -19,8 +19,8 @@ module Ai
       ModelUsage.empty
     end
 
-    def call(message:)
-      raise NotImplementedError, "#{self.class.name} must implement #call(message:)"
+    def call(message:, history: [])
+      raise NotImplementedError, "#{self.class.name} must implement #call(message:, history:)"
     end
   end
 end
