@@ -114,11 +114,14 @@ module Ai
 
       def initialize(model: ENV["AI_SITUATION_MODEL"], chat: nil)
         @chat = chat || build_chat(model)
+        @usage = ModelUsage.empty
       end
 
       def mode
         "ai_extracted"
       end
+
+      attr_reader :usage
 
       def call(message:)
         text = message.to_s.strip
@@ -133,6 +136,11 @@ module Ai
             #{text}
             </user_message>
           PROMPT
+        )
+        @usage = ModelUsage.from_response(
+          response,
+          input_rate_per_million: ENV["AI_SITUATION_INPUT_USD_PER_1M_TOKENS"],
+          output_rate_per_million: ENV["AI_SITUATION_OUTPUT_USD_PER_1M_TOKENS"]
         )
 
         normalize(response.content, raw_input: text)
