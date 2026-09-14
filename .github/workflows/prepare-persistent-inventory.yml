@@ -6,6 +6,7 @@ on:
       - feat/persistent-inventory
     paths:
       - .github/workflows/prepare-persistent-inventory.yml
+      - src/app/inventory-list.tsx
 
 permissions:
   contents: write
