@@ -7,7 +7,7 @@ module Ai
         "model_free"
       end
 
-      def call(message:)
+      def call(message:, history: [])
         text = message.to_s.strip
         raise ArgumentError, "message must not be blank" if text.empty?
 

@@ -1,6 +1,6 @@
 # Rechibox backend spike
 
-This Rails API slice wires raw advice text to Organized retrieval, context composition, an optional final model-generated answer, and optional reproducible run tracing.
+This Rails API slice wires raw advice text to Organized retrieval, context composition, an optional final model-generated answer, optional reproducible run tracing, and a small multi-turn conversation contract.
 
 ```text
 POST /api/advice
@@ -44,6 +44,8 @@ AI_SITUATION_EXTRACTOR=ruby_llm
 AI_SITUATION_MODEL=<provider-model-name>
 ```
 
+When advice is generated inside a conversation, the extractor also receives earlier user/assistant turns. The current user message remains the Situation Model `raw_input`; history is context used only to resolve references and carry forward still-relevant state.
+
 ## Final answer generation
 
 `Ai::AnswerGenerator` is a separate boundary after retrieval and context composition.
@@ -62,6 +64,46 @@ Configure provider credentials separately, for example `OPENAI_API_KEY`, `ANTHRO
 
 Enabling both RubyLLM situation extraction and RubyLLM answer generation performs two model calls per advice request. Leaving the defaults unchanged performs zero model calls, so CI and normal development do not spend model credits.
 
+## Conversation contract v0.1
+
+The product-facing conversation API is intentionally small:
+
+```text
+POST /api/conversations
+GET  /api/conversations/:id
+POST /api/conversations/:id/messages
+```
+
+Create a conversation:
+
+```sh
+curl -X POST http://localhost:3000/api/conversations
+```
+
+Send the first turn:
+
+```sh
+curl -X POST http://localhost:3000/api/conversations/<id>/messages \
+  -H 'Content-Type: application/json' \
+  -d '{"message":"У мене маленька кімната і багато коробок.","limit":4}'
+```
+
+A later turn automatically passes the persisted earlier turns through SituationExtractor and ContextComposer:
+
+```sh
+curl -X POST http://localhost:3000/api/conversations/<id>/messages \
+  -H 'Content-Type: application/json' \
+  -d '{"message":"А що робити з тими, які я вже продав?","limit":4}'
+```
+
+Conversation records use `contract_version: "0.1"` and messages contain an immutable UUID, role, text, timestamp, and optional trace ID. The spike uses a file-backed JSON directory so the conversation boundary is real without forcing a database decision yet. Configure its location with:
+
+```sh
+CONVERSATION_STORE_PATH=tmp/conversations
+```
+
+The default is `tmp/conversations`. Writes are lock-protected and conversation IDs are validated before filesystem access. This adapter is not the long-term persistence design; PostgreSQL/ActiveRecord can replace it behind `Conversations::Store` once product state and deployment requirements justify that move.
+
 ## AI run tracing and usage
 
 `Ai::TraceRecorder` records the causal inputs that produced an advice result without introducing a database yet.
@@ -76,7 +118,7 @@ AI_TRACE_STORE=jsonl
 AI_TRACE_PATH=tmp/ai-runs.jsonl
 ```
 
-Trace format `0.2` captures the original input, Situation Model, retrieval provenance, final answer, per-stage timings, and model usage. The API also exposes the same `metrics` block even when trace persistence is disabled.
+Trace format `0.2` captures the original input, conversation history, Situation Model, retrieval provenance, final answer, per-stage timings, and model usage. The API also exposes the same `metrics` block even when trace persistence is disabled.
 
 Timings are measured independently for extraction, retrieval, context composition, answer generation, and the complete request. When RubyLLM exposes token usage, the extractor and answer generator record input/output tokens separately and aggregate them for the request.
 
@@ -128,4 +170,4 @@ curl -X POST http://localhost:3000/api/advice/dry_run \
 
 `limit` is optional. When omitted, the pipeline exposes the complete ranked candidate list. Selection policy is deliberately not hidden inside the retriever.
 
-RubyLLM remains bounded by explicit Rails-owned stages: extraction structures the situation, retrieval selects Organized records, context composition prepares the model input, answer generation produces the final prose, and trace recording persists the causal execution record. No autonomous agent loop is required for this pipeline.
+RubyLLM remains bounded by explicit Rails-owned stages: extraction structures the situation, retrieval selects Organized records, context composition prepares the model input, answer generation produces the final prose, and trace recording persists the causal execution record. Conversation persistence wraps those stages but does not turn them into an autonomous agent loop.
