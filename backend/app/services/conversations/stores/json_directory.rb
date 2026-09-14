@@ -14,11 +14,12 @@ module Conversations
         @path = Pathname.new(path)
       end
 
-      def create
+      def create(world_id:)
         now = Time.now.utc.iso8601(6)
         conversation = {
           "contract_version" => CONTRACT_VERSION,
           "id" => SecureRandom.uuid,
+          "world_id" => world_id,
           "created_at" => now,
           "updated_at" => now,
           "messages" => []

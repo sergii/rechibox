@@ -1,9 +1,10 @@
 module Ai
   class ContextComposer
-    def initialize(situation:, knowledge:, conversation: [])
+    def initialize(situation:, knowledge:, conversation: [], world_state: nil)
       @situation = situation
       @knowledge = knowledge
       @conversation = Array(conversation)
+      @world_state = world_state
     end
 
     def call
@@ -14,6 +15,7 @@ module Ai
           "Prefer concrete actions over generic advice."
         ],
         "conversation" => @conversation,
+        "world_state" => @world_state,
         "situation" => @situation,
         "knowledge" => @knowledge.map do |record|
           {

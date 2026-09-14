@@ -3,17 +3,25 @@ require "time"
 
 module Conversations
   class Reply
-    def initialize(conversation_id:, message:, limit: nil, store: Store.default)
+    def initialize(
+      conversation_id:,
+      message:,
+      limit: nil,
+      store: Store.default,
+      world_store: WorldState::Store.default
+    )
       @conversation_id = conversation_id
       @message = message.to_s.strip
       @limit = limit
       @store = store
+      @world_store = world_store
     end
 
     def call
       raise ArgumentError, "message must not be blank" if @message.empty?
 
       conversation = @store.fetch(@conversation_id)
+      world = @world_store.fetch(conversation.fetch("world_id"))
       history = conversation.fetch("messages").map do |message|
         {
           "role" => message.fetch("role"),
@@ -21,13 +29,23 @@ module Conversations
         }
       end
 
+      user_message = build_message(role: "user", text: @message)
       advice = Advice::Generate.new(
         message: @message,
         history: history,
+        world_state: world,
         limit: @limit
       ).call
 
-      new_messages = [build_message(role: "user", text: @message)]
+      updated_world = WorldState::ProjectSituation.new(
+        world_id: world.fetch("id"),
+        situation: advice.fetch("situation"),
+        conversation_id: @conversation_id,
+        message_id: user_message.fetch("id"),
+        store: @world_store
+      ).call
+
+      new_messages = [user_message]
       if advice["answer"]
         new_messages << build_message(
           role: "assistant",
@@ -40,6 +58,7 @@ module Conversations
 
       {
         "conversation" => updated,
+        "world_state" => updated_world,
         "advice" => advice
       }
     end

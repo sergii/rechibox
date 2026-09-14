@@ -1,7 +1,17 @@
 module Api
   class ConversationsController < ApplicationController
     def create
-      render json: Conversations::Store.default.create, status: :created
+      world_store = WorldState::Store.default
+      world = if params[:world_id].present?
+        world_store.fetch(params[:world_id])
+      else
+        world_store.create
+      end
+
+      conversation = Conversations::Store.default.create(world_id: world.fetch("id"))
+      render json: conversation, status: :created
+    rescue ArgumentError, KeyError => e
+      render json: { error: e.message }, status: :unprocessable_entity
     end
 
     def show
