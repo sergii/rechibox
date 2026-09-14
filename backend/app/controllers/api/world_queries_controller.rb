@@ -22,6 +22,36 @@ module Api
       render json: { error: e.message }, status: :not_found
     end
 
+    def graph
+      graph = WorldState::Graph.new(world_id: params.require(:id))
+      result = if params[:root_id].present?
+        graph.physical_tree(root_id: params[:root_id], max_depth: params[:max_depth])
+      else
+        {
+          "contract_version" => "0.1",
+          "world_id" => params.require(:id),
+          "edges" => graph.relations(predicates: relation_predicates)
+        }
+      end
+
+      render json: result
+    rescue ArgumentError => e
+      render json: { error: e.message }, status: :unprocessable_entity
+    rescue KeyError => e
+      render json: { error: e.message }, status: :not_found
+    end
+
+    def physical_location
+      render json: WorldState::Graph.new(world_id: params.require(:id)).physical_location(
+        entity_id: params.require(:entity_id),
+        max_depth: params[:max_depth]
+      )
+    rescue ArgumentError => e
+      render json: { error: e.message }, status: :unprocessable_entity
+    rescue KeyError => e
+      render json: { error: e.message }, status: :not_found
+    end
+
     private
 
     def entity_filters
@@ -30,6 +60,13 @@ module Api
 
     def claim_filters
       params.permit(:predicate, :status, :source, :subject_id, :object_entity_id, :object_value).to_h
+    end
+
+    def relation_predicates
+      value = params[:predicates]
+      return WorldState::Graph::RELATION_PREDICATES if value.blank?
+
+      value.to_s.split(",").map(&:strip)
     end
   end
 end
