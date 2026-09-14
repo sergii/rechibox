@@ -5,16 +5,19 @@ class ApiConversationsTest < ActionDispatch::IntegrationTest
   setup do
     @previous_store_path = ENV["CONVERSATION_STORE_PATH"]
     @previous_world_store_path = ENV["WORLD_STATE_STORE_PATH"]
+    @previous_state_update_proposer = ENV["AI_STATE_UPDATE_PROPOSER"]
     @store_dir = Dir.mktmpdir
     @world_store_dir = Dir.mktmpdir
     ENV["CONVERSATION_STORE_PATH"] = @store_dir
     ENV["WORLD_STATE_STORE_PATH"] = @world_store_dir
+    ENV["AI_STATE_UPDATE_PROPOSER"] = "disabled"
     ENV["ORGANIZED_RUNTIME_PATH"] = Rails.root.join("test/fixtures/organized-v1.jsonl").to_s
   end
 
   teardown do
     ENV["CONVERSATION_STORE_PATH"] = @previous_store_path
     ENV["WORLD_STATE_STORE_PATH"] = @previous_world_store_path
+    ENV["AI_STATE_UPDATE_PROPOSER"] = @previous_state_update_proposer
     FileUtils.remove_entry(@store_dir) if @store_dir && File.exist?(@store_dir)
     FileUtils.remove_entry(@world_store_dir) if @world_store_dir && File.exist?(@world_store_dir)
   end
@@ -42,6 +45,8 @@ class ApiConversationsTest < ActionDispatch::IntegrationTest
     assert_equal 1, first.dig("conversation", "messages").size
     assert_empty first.dig("advice", "context", "conversation")
     assert_equal world_id, first.dig("advice", "context", "world_state", "id")
+    assert_equal "disabled", first.fetch("state_update_proposal_mode")
+    assert_empty first.fetch("state_update_proposals")
 
     post "/api/conversations/#{id}/messages",
          params: { message: "А що робити з тими, які я вже продав?", limit: 2 },

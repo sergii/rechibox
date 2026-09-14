@@ -8,13 +8,15 @@ module Conversations
       message:,
       limit: nil,
       store: Store.default,
-      world_store: WorldState::Store.default
+      world_store: WorldState::Store.default,
+      state_update_proposer: Ai::StateUpdateProposer.default
     )
       @conversation_id = conversation_id
       @message = message.to_s.strip
       @limit = limit
       @store = store
       @world_store = world_store
+      @state_update_proposer = state_update_proposer
     end
 
     def call
@@ -45,6 +47,11 @@ module Conversations
         store: @world_store
       ).call
 
+      proposals = @state_update_proposer.call(
+        situation: advice.fetch("situation"),
+        world_state: updated_world
+      )
+
       new_messages = [user_message]
       if advice["answer"]
         new_messages << build_message(
@@ -59,7 +66,9 @@ module Conversations
       {
         "conversation" => updated,
         "world_state" => updated_world,
-        "advice" => advice
+        "advice" => advice,
+        "state_update_proposal_mode" => @state_update_proposer.mode,
+        "state_update_proposals" => proposals
       }
     end
 

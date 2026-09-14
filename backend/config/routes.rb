@@ -5,6 +5,7 @@ Rails.application.routes.draw do
 
     resources :worlds, only: %i[create show] do
       post "updates", to: "worlds#update_state", on: :member
+      post "proposals", to: "worlds#propose_updates", on: :member
     end
 
     resources :conversations, only: %i[create show] do

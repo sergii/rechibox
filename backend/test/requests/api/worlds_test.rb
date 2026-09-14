@@ -4,12 +4,15 @@ require "tmpdir"
 class ApiWorldsTest < ActionDispatch::IntegrationTest
   setup do
     @previous_path = ENV["WORLD_STATE_STORE_PATH"]
+    @previous_proposer = ENV["AI_STATE_UPDATE_PROPOSER"]
     @dir = Dir.mktmpdir
     ENV["WORLD_STATE_STORE_PATH"] = @dir
+    ENV["AI_STATE_UPDATE_PROPOSER"] = "disabled"
   end
 
   teardown do
     ENV["WORLD_STATE_STORE_PATH"] = @previous_path
+    ENV["AI_STATE_UPDATE_PROPOSER"] = @previous_proposer
     FileUtils.remove_entry(@dir) if @dir && File.exist?(@dir)
   end
 
@@ -43,6 +46,36 @@ class ApiWorldsTest < ActionDispatch::IntegrationTest
     claim = response.parsed_body.fetch("claims").last
     assert_equal "location", claim.fetch("predicate")
     assert_equal garage_id, claim.dig("object", "id")
+  end
+
+  test "state update proposals are disabled by default and do not mutate the world" do
+    post "/api/worlds", as: :json
+    assert_response :created
+    world = response.parsed_body
+
+    post "/api/worlds/#{world.fetch("id")}/proposals",
+         params: {
+           situation: {
+             contract_version: "0.1",
+             raw_input: "Я переніс коробку на полицю.",
+             facts: [{ text: "Я переніс коробку на полицю.", source: "user" }],
+             goals: [],
+             constraints: [],
+             uncertainties: [],
+             hypotheses: [],
+             entities: []
+           }
+         },
+         as: :json
+
+    assert_response :success
+    result = response.parsed_body
+    assert_equal "disabled", result.fetch("mode")
+    assert_empty result.fetch("proposals")
+
+    get "/api/worlds/#{world.fetch("id")}"
+    assert_response :success
+    assert_empty response.parsed_body.fetch("claims")
   end
 
   test "invalid update is unprocessable" do
