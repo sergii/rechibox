@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -27,7 +27,34 @@ export default function InventoryListScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadInventory = useCallback(async () => {
+  useEffect(() => {
+    let cancelled = false;
+
+    void listInventoryItems()
+      .then((storedItems) => {
+        if (!cancelled) {
+          setItems(storedItems);
+          setError(null);
+        }
+      })
+      .catch((loadError) => {
+        console.error('Could not load local inventory', loadError);
+        if (!cancelled) {
+          setError('Не вдалося завантажити локальний інвентар.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function handleRetry() {
     setLoading(true);
     setError(null);
 
@@ -39,11 +66,7 @@ export default function InventoryListScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
-
-  useEffect(() => {
-    void loadInventory();
-  }, [loadInventory]);
+  }
 
   return (
     <SafeAreaView
@@ -73,7 +96,7 @@ export default function InventoryListScreen() {
             <Text accessibilityLiveRegion="polite" className="text-destructive">
               {error}
             </Text>
-            <Button onPress={() => void loadInventory()} variant="outline">
+            <Button onPress={() => void handleRetry()} variant="outline">
               Спробувати ще раз
             </Button>
           </Card>
