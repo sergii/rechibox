@@ -3,6 +3,10 @@ module Ai
     class Passthrough < SituationExtractor
       CONTRACT_VERSION = "0.1"
 
+      def mode
+        "model_free"
+      end
+
       def call(message:)
         text = message.to_s.strip
         raise ArgumentError, "message must not be blank" if text.empty?
