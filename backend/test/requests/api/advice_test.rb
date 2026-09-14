@@ -13,6 +13,8 @@ class ApiAdviceTest < ActionDispatch::IntegrationTest
     assert_response :success
     body = response.parsed_body
     assert_equal "model_free", body.fetch("mode")
+    assert_equal "disabled", body.fetch("answer_mode")
+    assert_not body.key?("answer")
     assert_equal "0.1", body.dig("situation", "contract_version")
     assert_equal message, body.dig("situation", "raw_input")
     assert_empty body.dig("situation", "facts")
