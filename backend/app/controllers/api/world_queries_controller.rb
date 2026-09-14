@@ -52,6 +52,18 @@ module Api
       render json: { error: e.message }, status: :not_found
     end
 
+    def query
+      render json: WorldState::Query.new(world_id: params.require(:id)).call(
+        intent: params.require(:intent),
+        entity_id: params.require(:entity_id),
+        max_depth: params[:max_depth]
+      )
+    rescue ActionController::ParameterMissing, ArgumentError => e
+      render json: { error: e.message }, status: :unprocessable_entity
+    rescue KeyError => e
+      render json: { error: e.message }, status: :not_found
+    end
+
     private
 
     def entity_filters
