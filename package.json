@@ -55,6 +55,7 @@
     "cloud:ios": "bash ./bin/cloud-ios-smoke",
     "device": "bash ./bin/run-on-real-device",
     "device:check": "bash ./bin/run-on-real-device --check",
+    "device:hub": "npx --yes expo-device-hub@0.10.1",
     "device:ios": "bash ./bin/run-on-real-device ios",
     "device:android": "bash ./bin/run-on-real-device android",
     "iphone": "bash ./bin/run-on-real-device ios",
