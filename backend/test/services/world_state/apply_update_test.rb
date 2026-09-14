@@ -33,6 +33,40 @@ class WorldStateApplyUpdateTest < ActiveSupport::TestCase
     assert_equal "active", claim.fetch("status")
   end
 
+  test "identical assert is idempotent" do
+    update = {
+      "operation" => "assert",
+      "predicate" => "location",
+      "subject_id" => @box_id,
+      "object" => { "entity_id" => @garage_id }
+    }
+
+    apply(update)
+    updated = apply(update)
+
+    assert_equal 1, updated.fetch("claims").count { |claim| claim["predicate"] == "location" }
+  end
+
+  test "singleton predicates require an explicit transition when active value conflicts" do
+    apply(
+      "operation" => "assert",
+      "predicate" => "disposition",
+      "subject_id" => @box_id,
+      "object" => { "value" => "keep" }
+    )
+
+    error = assert_raises(ArgumentError) do
+      apply(
+        "operation" => "assert",
+        "predicate" => "disposition",
+        "subject_id" => @box_id,
+        "object" => { "value" => "sell" }
+      )
+    end
+
+    assert_includes error.message, "correct or supersede"
+  end
+
   test "correction preserves history and marks the previous assertion as wrong" do
     first = apply(
       "operation" => "assert",
