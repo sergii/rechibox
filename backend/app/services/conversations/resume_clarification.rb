@@ -8,7 +8,8 @@ module Conversations
       store: Store.default,
       world_store: WorldState::Store.default,
       clarification_store: WorldState::ClarificationStore.default,
-      state_update_proposer: Ai::StateUpdateProposer.default
+      state_update_proposer: Ai::StateUpdateProposer.default,
+      turn_store: TurnStore.default
     )
       @conversation_id = conversation_id
       @clarification_id = clarification_id
@@ -18,6 +19,7 @@ module Conversations
       @world_store = world_store
       @clarification_store = clarification_store
       @state_update_proposer = state_update_proposer
+      @turn_store = turn_store
     end
 
     def call
@@ -39,13 +41,15 @@ module Conversations
       ).call
 
       if answered.fetch("status") == "none_of_above"
+        turn = update_turn(context, status: "completed", clarification: answered, proposals: [])
         return {
           "conversation" => conversation,
-          "conversation_status" => "clarification_unresolved",
+          "conversation_status" => turn ? turn.fetch("status") : "completed",
+          "turn" => turn,
           "clarification" => answered,
           "state_update_proposal_mode" => @state_update_proposer.mode,
           "state_update_proposals" => []
-        }
+        }.compact
       end
 
       world = @world_store.fetch(world_id)
@@ -57,19 +61,36 @@ module Conversations
         proposer: @state_update_proposer,
         store: @world_store
       ).call
+      proposals = proposal_result.fetch("proposals")
+      turn_status = proposals.any? ? "ready_for_review" : "completed"
+      turn = update_turn(context, status: turn_status, clarification: answered, proposals: proposals)
 
       {
         "conversation" => conversation,
-        "conversation_status" => "resumed",
+        "conversation_status" => turn ? turn.fetch("status") : turn_status,
+        "turn" => turn,
         "clarification" => answered,
         "world_state" => world,
         "entity_resolution" => resolution,
         "state_update_proposal_mode" => proposal_result.fetch("mode"),
-        "state_update_proposals" => proposal_result.fetch("proposals")
-      }
+        "state_update_proposals" => proposals
+      }.compact
     end
 
     private
+
+    def update_turn(context, status:, clarification:, proposals:)
+      turn_id = context["turn_id"]
+      return unless turn_id
+
+      @turn_store.update(conversation_id: @conversation_id, id: turn_id) do |record|
+        record["status"] = status
+        record["resolved_clarification_ids"] ||= []
+        record["resolved_clarification_ids"] << clarification.fetch("id") unless record["resolved_clarification_ids"].include?(clarification.fetch("id"))
+        record["proposal_ids"] = proposals.map { |row| row.fetch("id") }
+        record["completed_at"] = Time.now.utc.iso8601(6) if status == "completed"
+      end
+    end
 
     def resolved_resolution(context:, clarification:)
       original = context.fetch("entity_resolution")
