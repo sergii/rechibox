@@ -3,11 +3,12 @@ require "time"
 
 module Advice
   class Generate
-    TRACE_VERSION = "0.2"
+    TRACE_VERSION = "0.3"
 
     def initialize(
       message:,
       history: [],
+      world_state: nil,
       limit: nil,
       extractor: Ai::SituationExtractor.default,
       answer_generator: Ai::AnswerGenerator.default,
@@ -16,6 +17,7 @@ module Advice
     )
       @message = message
       @history = Array(history)
+      @world_state = world_state
       @limit = limit
       @extractor = extractor
       @answer_generator = answer_generator
@@ -44,7 +46,8 @@ module Advice
         Ai::ContextComposer.new(
           situation: situation,
           knowledge: records,
-          conversation: @history
+          conversation: @history,
+          world_state: @world_state
         ).call
       end
 
@@ -148,6 +151,7 @@ module Advice
         "timings_ms" => metrics.fetch("timings_ms"),
         "raw_input" => @message.to_s,
         "conversation_history" => @history,
+        "world_state" => @world_state,
         "situation" => situation,
         "retrieval_strategy" => retrieval.fetch("strategy"),
         "retrieved_knowledge" => retrieval.fetch("candidates").map do |candidate|
