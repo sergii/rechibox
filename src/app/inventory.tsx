@@ -1,5 +1,6 @@
 import { useImage } from '@shopify/react-native-skia';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { useRouter } from 'expo-router';
 import { models, useObjectDetector } from 'react-native-executorch';
 import { useEffect, useRef, useState } from 'react';
 import type { ColorValue } from 'react-native';
@@ -27,6 +28,7 @@ import {
   createInventoryRecognitionItems,
   type InventoryRecognitionItem,
 } from '@/inventory/detection';
+import { saveInventoryItems, type StoredInventoryItem } from '@/inventory/storage';
 
 type InventoryStage = 'camera' | 'preview' | 'recognizing' | 'review' | 'confirmed';
 
@@ -129,6 +131,7 @@ function LocalNotice() {
 
 export default function InventoryScreen() {
   const colors = useThemeColors();
+  const router = useRouter();
   const [permission, requestPermission, refreshPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
   const [appState, setAppState] = useState(AppState.currentState);
@@ -140,6 +143,8 @@ export default function InventoryScreen() {
   const [recognitionMs, setRecognitionMs] = useState<number | null>(null);
   const [debugMode, setDebugMode] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [savedItems, setSavedItems] = useState<StoredInventoryItem[]>([]);
 
   const skiaImage = useImage(photoUri);
   const detector = useObjectDetector(DETECTOR_MODEL);
@@ -281,11 +286,38 @@ export default function InventoryScreen() {
     );
   }
 
+  async function handleConfirm() {
+    if (isSaving) {
+      return;
+    }
+
+    setIsSaving(true);
+    setMessage(null);
+
+    try {
+      const saved = await saveInventoryItems(
+        includedItems.map((item) => ({
+          name: item.name,
+          sourceLabel: item.sourceLabel,
+          confidence: item.confidence,
+        }))
+      );
+      setSavedItems(saved);
+      setStage('confirmed');
+    } catch (error) {
+      console.error('Could not save local inventory', error);
+      setMessage('Не вдалося зберегти інвентар на цьому пристрої. Спробуйте ще раз.');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   function handleStartOver() {
     setPhotoUri(null);
     setItems([]);
     setRecognitionMs(null);
     setMessage(null);
+    setSavedItems([]);
     setCameraReady(false);
     setStage('camera');
   }
@@ -556,17 +588,21 @@ export default function InventoryScreen() {
                   );
                 })}
 
+                {message ? <ErrorText>{message}</ErrorText> : null}
                 {hasBlankIncludedName ? (
                   <ErrorText>Дайте назву кожній речі, яку хочете підтвердити.</ErrorText>
                 ) : null}
                 <Button
-                  accessibilityState={{ disabled: !canConfirm }}
-                  disabled={!canConfirm}
-                  onPress={() => setStage('confirmed')}
+                  accessibilityState={{ disabled: !canConfirm || isSaving }}
+                  disabled={!canConfirm || isSaving}
+                  loading={isSaving}
+                  onPress={() => void handleConfirm()}
                   size="lg">
-                  {`Підтвердити ${includedItems.length} ${
-                    includedItems.length === 1 ? 'річ' : 'речі'
-                  }`}
+                  {isSaving
+                    ? 'Зберігаємо…'
+                    : `Зберегти ${includedItems.length} ${
+                        includedItems.length === 1 ? 'річ' : 'речі'
+                      }`}
                 </Button>
                 <Button onPress={handleRetake} size="lg" variant="outline">
                   Зробити інше фото
@@ -577,18 +613,20 @@ export default function InventoryScreen() {
             {stage === 'confirmed' ? (
               <>
                 <Text accessibilityRole="header" variant="h2">
-                  Інвентар підтверджено локально
+                  Інвентар збережено
                 </Text>
                 <Text accessibilityLiveRegion="polite">
-                  Речі розпізнані на цьому пристрої. Дані не відправлені в backend і не збережені
-                  після цього сеансу.
+                  Речі збережені локально на цьому пристрої й залишаться після перезапуску застосунку. Backend-синхронізацію ще не налаштовано.
                 </Text>
                 <Card className="gap-2 p-4">
-                  {includedItems.map((item) => (
-                    <Text key={item.id}>• {item.name.trim()}</Text>
+                  {savedItems.map((item) => (
+                    <Text key={item.id}>• {item.name}</Text>
                   ))}
                 </Card>
-                <Button onPress={handleStartOver} size="lg">
+                <Button onPress={() => router.push('/inventory-list')} size="lg">
+                  Переглянути мій інвентар
+                </Button>
+                <Button onPress={handleStartOver} size="lg" variant="outline">
                   Додати ще фото
                 </Button>
               </>
