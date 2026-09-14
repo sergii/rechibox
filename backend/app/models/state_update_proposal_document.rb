@@ -1,0 +1,2 @@
+class StateUpdateProposalDocument < ApplicationRecord
+end
