@@ -91,11 +91,18 @@ module WorldState
 
       overlap = (left_tokens & right_tokens).size
       return 0.0 if overlap.zero?
-      return 0.0 if overlap == 1 && [left_tokens.size, right_tokens.size].max > 1
+      return weak_overlap_score(overlap, left_tokens, right_tokens) if overlap == 1
 
       containment = overlap.to_f / [left_tokens.size, right_tokens.size].min
       jaccard = overlap.to_f / (left_tokens | right_tokens).size
       ((containment * 0.7) + (jaccard * 0.3)).round(4)
+    end
+
+    def weak_overlap_score(overlap, left_tokens, right_tokens)
+      return 1.0 if left_tokens.size == 1 && right_tokens.size == 1
+
+      jaccard = overlap.to_f / (left_tokens | right_tokens).size
+      [0.2, jaccard].max.round(4)
     end
 
     def match_type(label, names, score)
