@@ -4,8 +4,8 @@ module Conversations
       Stores::JsonDirectory.new
     end
 
-    def create
-      raise NotImplementedError, "#{self.class.name} must implement #create"
+    def create(world_id:)
+      raise NotImplementedError, "#{self.class.name} must implement #create(world_id:)"
     end
 
     def fetch(id)
