@@ -39,16 +39,25 @@ module Conversations
         limit: @limit
       ).call
 
+      entity_resolution = WorldState::ResolveEntities.new(
+        world: world,
+        situation: advice.fetch("situation")
+      ).call
+
       updated_world = WorldState::ProjectSituation.new(
         world_id: world.fetch("id"),
         situation: advice.fetch("situation"),
         conversation_id: @conversation_id,
         message_id: user_message.fetch("id"),
+        entity_resolutions: entity_resolution,
         store: @world_store
       ).call
 
+      proposal_situation = advice.fetch("situation").merge(
+        "entity_resolutions" => entity_resolution.fetch("resolutions")
+      )
       proposals = @state_update_proposer.call(
-        situation: advice.fetch("situation"),
+        situation: proposal_situation,
         world_state: updated_world
       )
 
@@ -66,6 +75,7 @@ module Conversations
       {
         "conversation" => updated,
         "world_state" => updated_world,
+        "entity_resolution" => entity_resolution,
         "advice" => advice,
         "state_update_proposal_mode" => @state_update_proposer.mode,
         "state_update_proposals" => proposals
