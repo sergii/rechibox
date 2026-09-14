@@ -9,7 +9,8 @@ module Conversations
       limit: nil,
       store: Store.default,
       world_store: WorldState::Store.default,
-      state_update_proposer: Ai::StateUpdateProposer.default
+      state_update_proposer: Ai::StateUpdateProposer.default,
+      clarification_store: WorldState::ClarificationStore.default
     )
       @conversation_id = conversation_id
       @message = message.to_s.strip
@@ -17,6 +18,7 @@ module Conversations
       @store = store
       @world_store = world_store
       @state_update_proposer = state_update_proposer
+      @clarification_store = clarification_store
     end
 
     def call
@@ -42,6 +44,12 @@ module Conversations
       entity_resolution = WorldState::ResolveEntities.new(
         world: world,
         situation: advice.fetch("situation")
+      ).call
+
+      clarifications = WorldState::BuildClarifications.new(
+        world_id: world.fetch("id"),
+        resolution: entity_resolution,
+        store: @clarification_store
       ).call
 
       updated_world = WorldState::ProjectSituation.new(
@@ -76,6 +84,7 @@ module Conversations
         "conversation" => updated,
         "world_state" => updated_world,
         "entity_resolution" => entity_resolution,
+        "identity_clarifications" => clarifications,
         "advice" => advice,
         "state_update_proposal_mode" => @state_update_proposer.mode,
         "state_update_proposals" => proposals
