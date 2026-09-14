@@ -104,7 +104,7 @@ jobs:
         run: npm install expo-sqlite@~57.0.3 --save --package-lock-only --ignore-scripts
 
       - name: Install dependencies for static checks
-        run: npm ci --ignore-scripts
+        run: npm ci
 
       - name: Typecheck
         run: npm run typecheck
