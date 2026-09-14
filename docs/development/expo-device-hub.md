@@ -1,31 +1,44 @@
 # Expo Device Hub
 
-Rechibox can use Expo Device Hub as a local simulator/emulator control surface.
+Rechibox uses Expo Device Hub as an installed Expo DevTools plugin for local iOS Simulator and Android Emulator development.
 
-## Run
+The project is on Expo SDK 57, which satisfies the Device Hub requirement.
+
+## Integrated mode
+
+Install project dependencies as usual:
+
+```sh
+npm ci
+```
+
+Then start Expo:
+
+```sh
+npm start
+```
+
+Because `expo-device-hub` is installed in the project dependency graph, Expo registers it automatically as a DevTools plugin. Metro prints a local Device Hub URL similar to:
+
+```text
+http://localhost:8081/_expo/plugins/expo-device-hub
+```
+
+Use that browser dashboard to stream and control available iOS simulators and Android emulators, including tap, swipe, scroll, typing, boot/shutdown, and appearance changes.
+
+## Standalone mode
+
+The installed package also exposes its standalone CLI:
 
 ```sh
 npm run device:hub
 ```
 
-The script pins `expo-device-hub` to `0.10.1` and runs it in standalone mode through `npx`. This keeps the app dependency graph and `package-lock.json` unchanged while giving local access to the browser-based device dashboard.
+This uses the repository-pinned package rather than downloading a fresh copy through `npx`.
 
-The Hub can stream and control iOS simulators and Android emulators, including tap, swipe, scroll, typing, boot/shutdown, and appearance changes.
-
-Requirements:
+## Requirements
 
 - iOS: macOS with Xcode and an installed Simulator runtime.
 - Android: Android SDK with `emulator` and `adb` available.
 
-## Integrated Expo DevTools mode
-
-Expo Device Hub also supports registration as an Expo DevTools plugin when installed into the app:
-
-```sh
-npx expo install expo-device-hub
-npm start
-```
-
-Do not install it into the project dependency graph casually. If we adopt integrated mode, commit the resulting `package.json` and `package-lock.json` changes together and verify Expo SDK compatibility.
-
-For now, standalone mode is deliberate: it provides the useful local dashboard without changing production/runtime dependencies or triggering EAS work.
+Device Hub is local development tooling. Adding it does not require an EAS build, native app build, or OTA publish.
