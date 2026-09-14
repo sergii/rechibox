@@ -16,7 +16,7 @@ export default function HomeScreen() {
         </View>
         <Text style={[styles.description, { color: colors.text }]}>Простір для ваших речей.</Text>
         <Text style={[styles.note, { color: colors.text }]}>
-          Спробуйте демонстраційний вибір боксу або AI-інвентар із камерою. Бронювання та інвентар поки не зберігаються.
+          Спробуйте вибір боксу або додайте речі через AI-інвентар. Підтверджені речі зберігаються локально на цьому пристрої.
         </Text>
         <Pressable
           accessibilityRole="button"
@@ -34,7 +34,16 @@ export default function HomeScreen() {
             styles.secondaryButton,
             { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
           ]}>
-          <Text style={[styles.secondaryButtonText, { color: colors.text }]}>AI-інвентар з камерою</Text>
+          <Text style={[styles.secondaryButtonText, { color: colors.text }]}>Додати речі через AI</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push('/inventory-list')}
+          style={({ pressed }) => [
+            styles.secondaryButton,
+            { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
+          ]}>
+          <Text style={[styles.secondaryButtonText, { color: colors.text }]}>Мій інвентар</Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
