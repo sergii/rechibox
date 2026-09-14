@@ -20,6 +20,8 @@ Rails.application.routes.draw do
 
     resources :conversations, only: %i[create show] do
       post "messages", to: "conversations#reply", on: :member
+      get "turns", to: "conversations#turns", on: :member
+      get "turns/:turn_id", to: "conversations#turn", on: :member
       post "clarifications/:clarification_id/answer", to: "conversations#resume_clarification", on: :member
     end
   end

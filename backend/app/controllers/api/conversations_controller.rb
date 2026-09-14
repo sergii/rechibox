@@ -20,6 +20,24 @@ module Api
       render json: { error: e.message }, status: :not_found
     end
 
+    def turns
+      render json: {
+        conversation_id: params.require(:id),
+        turns: Conversations::TurnStore.default.list(params.require(:id))
+      }
+    rescue ArgumentError, KeyError => e
+      render json: { error: e.message }, status: :not_found
+    end
+
+    def turn
+      render json: Conversations::TurnStore.default.fetch(
+        conversation_id: params.require(:id),
+        id: params.require(:turn_id)
+      )
+    rescue ArgumentError, KeyError => e
+      render json: { error: e.message }, status: :not_found
+    end
+
     def reply
       result = Conversations::Reply.new(
         conversation_id: params.require(:id),

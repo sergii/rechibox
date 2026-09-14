@@ -7,6 +7,7 @@ module WorldState
       resolution:,
       conversation_id: nil,
       message_id: nil,
+      turn_id: nil,
       situation: nil,
       store: ClarificationStore.default
     )
@@ -14,6 +15,7 @@ module WorldState
       @resolution = resolution.to_h
       @conversation_id = conversation_id
       @message_id = message_id
+      @turn_id = turn_id
       @situation = situation&.to_h
       @store = store
     end
@@ -49,9 +51,10 @@ module WorldState
       {
         "conversation_id" => @conversation_id,
         "message_id" => @message_id,
+        "turn_id" => @turn_id,
         "situation" => @situation,
         "entity_resolution" => @resolution
-      }
+      }.compact
     end
 
     def build_question(label, candidates)
