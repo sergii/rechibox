@@ -1,0 +1,39 @@
+name: Bootstrap Device Hub lockfile
+
+on:
+  push:
+    branches:
+      - chore/expo-device-hub
+    paths:
+      - .github/workflows/bootstrap-device-hub-lock.yml
+
+permissions:
+  contents: write
+
+jobs:
+  lockfile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Add Expo Device Hub to dependency graph
+        run: npm install expo-device-hub@0.10.1 --save --package-lock-only --ignore-scripts
+
+      - name: Commit dependency metadata
+        run: |
+          if git diff --quiet -- package.json package-lock.json; then
+            echo "Dependency metadata is already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "chore: install Expo Device Hub"
+          git push
