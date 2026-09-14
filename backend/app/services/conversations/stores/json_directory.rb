@@ -1,5 +1,6 @@
 require "fileutils"
 require "json"
+require "pathname"
 require "securerandom"
 require "time"
 
@@ -7,6 +8,7 @@ module Conversations
   module Stores
     class JsonDirectory < Store
       CONTRACT_VERSION = "0.1"
+      ID_PATTERN = /\A[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i
 
       def initialize(path: ENV.fetch("CONVERSATION_STORE_PATH", "tmp/conversations"))
         @path = Pathname.new(path)
@@ -44,11 +46,18 @@ module Conversations
       private
 
       def file_path(id)
-        @path.join("#{id}.json")
+        @path.join("#{validated_id(id)}.json")
       end
 
       def lock_path(id)
-        @path.join("#{id}.lock")
+        @path.join("#{validated_id(id)}.lock")
+      end
+
+      def validated_id(id)
+        value = id.to_s
+        raise KeyError, "conversation not found" unless value.match?(ID_PATTERN)
+
+        value
       end
 
       def with_lock(id)
