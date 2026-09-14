@@ -28,15 +28,14 @@ module WorldState
 
       def update(id:)
         record = WorldDocument.find(id)
-        result = nil
+        world = nil
         record.with_lock do
           world = record.reload.payload.deep_dup
-          result = yield world
+          yield world
           world["updated_at"] = Time.now.utc.iso8601(6)
           record.update!(payload: world)
-          result = world if result.equal?(world)
         end
-        result || record.reload.payload.deep_dup
+        world
       rescue ::ActiveRecord::RecordNotFound
         raise KeyError, "world state not found"
       end
