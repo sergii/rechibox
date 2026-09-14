@@ -24,6 +24,39 @@ module Api
       render json: { error: e.message }, status: :not_found
     end
 
+    def clarifications
+      render json: {
+        world_id: params.require(:id),
+        clarifications: WorldState::ClarificationStore.default.list(world_id: params.require(:id))
+      }
+    rescue ArgumentError, KeyError => e
+      render json: { error: e.message }, status: :not_found
+    end
+
+    def clarification
+      render json: WorldState::ClarificationStore.default.fetch(
+        world_id: params.require(:id),
+        id: params.require(:clarification_id)
+      )
+    rescue ArgumentError, KeyError => e
+      render json: { error: e.message }, status: :not_found
+    end
+
+    def answer_clarification
+      result = WorldState::AnswerClarification.new(
+        world_id: params.require(:id),
+        clarification_id: params.require(:clarification_id),
+        action: params.require(:action),
+        option_id: params[:option_id]
+      ).call
+
+      render json: result
+    rescue ActionController::ParameterMissing, ArgumentError => e
+      render json: { error: e.message }, status: :unprocessable_entity
+    rescue KeyError => e
+      render json: { error: e.message }, status: :not_found
+    end
+
     def identity_reviews
       world = WorldState::Store.default.fetch(params.require(:id))
       render json: {
