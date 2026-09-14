@@ -16,6 +16,37 @@ class ApiWorldsTest < ActionDispatch::IntegrationTest
     FileUtils.remove_entry(@dir) if @dir && File.exist?(@dir)
   end
 
+  test "entity resolution maps a situation entity to a durable world entity" do
+    post "/api/worlds", as: :json
+    world_id = response.parsed_body.fetch("id")
+    box_id = SecureRandom.uuid
+
+    WorldState::Store.default.update(id: world_id) do |world|
+      world.fetch("entities") << {
+        "id" => box_id,
+        "kind" => "container",
+        "label" => "синя коробка",
+        "aliases" => ["box 3"],
+        "attributes" => {}
+      }
+    end
+
+    post "/api/worlds/#{world_id}/resolve_entities",
+         params: {
+           situation: {
+             entities: [
+               { ref: "E1", kind: "container", label: "ця синя коробка", attributes: {} }
+             ]
+           }
+         },
+         as: :json
+
+    assert_response :success
+    resolution = response.parsed_body.fetch("resolutions").first
+    assert_equal "resolved", resolution.fetch("status")
+    assert_equal box_id, resolution.fetch("durable_entity_id")
+  end
+
   test "typed state update endpoint persists an explicit relation" do
     post "/api/worlds", as: :json
     assert_response :created
