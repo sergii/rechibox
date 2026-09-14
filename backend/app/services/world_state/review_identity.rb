@@ -30,7 +30,9 @@ module WorldState
           apply_different_entities(world)
         end
 
-        world.fetch("identity_reviews") << review
+        unless world.fetch("identity_reviews").any? { |existing| existing["id"] == review["id"] }
+          world.fetch("identity_reviews") << review
+        end
         world
       end
     end
