@@ -7,6 +7,7 @@ module Advice
 
     def initialize(
       message:,
+      history: [],
       limit: nil,
       extractor: Ai::SituationExtractor.default,
       answer_generator: Ai::AnswerGenerator.default,
@@ -14,6 +15,7 @@ module Advice
       catalog: Knowledge::Catalog.default
     )
       @message = message
+      @history = Array(history)
       @limit = limit
       @extractor = extractor
       @answer_generator = answer_generator
@@ -26,7 +28,7 @@ module Advice
       started_monotonic = monotonic_now
 
       situation, extraction_latency_ms = measure do
-        @extractor.call(message: @message)
+        @extractor.call(message: @message, history: @history)
       end
 
       retrieval, retrieval_latency_ms = measure do
@@ -41,7 +43,8 @@ module Advice
       context, context_latency_ms = measure do
         Ai::ContextComposer.new(
           situation: situation,
-          knowledge: records
+          knowledge: records,
+          conversation: @history
         ).call
       end
 
@@ -144,6 +147,7 @@ module Advice
         "latency_ms" => metrics.dig("timings_ms", "total"),
         "timings_ms" => metrics.fetch("timings_ms"),
         "raw_input" => @message.to_s,
+        "conversation_history" => @history,
         "situation" => situation,
         "retrieval_strategy" => retrieval.fetch("strategy"),
         "retrieved_knowledge" => retrieval.fetch("candidates").map do |candidate|
