@@ -63,8 +63,11 @@ module WorldState
         target = @update.fetch("target_claim_id").to_s
         raise ArgumentError, "target_claim_id must not be blank" if target.empty?
       end
+    rescue KeyError => e
+      field = e.key || "unknown"
+      raise ArgumentError, "missing state update field: #{field}"
     rescue TypeError, ArgumentError => e
-      raise e if e.message.start_with?("unsupported", "attribute", "confidence", "subject", "object", "target")
+      raise e if e.message.start_with?("unsupported", "attribute", "confidence", "subject", "object", "target", "missing")
       raise ArgumentError, "confidence must be between 0 and 1"
     end
 
