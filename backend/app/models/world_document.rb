@@ -1,0 +1,2 @@
+class WorldDocument < ApplicationRecord
+end
