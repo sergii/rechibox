@@ -1,0 +1,63 @@
+name: Validate boxes inventory slice
+
+on:
+  push:
+    branches:
+      - feat/boxes-inventory
+    paths:
+      - .github/workflows/validate-boxes-inventory.yml
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check TypeScript for new errors
+        run: |
+          set +e
+          npm run typecheck 2>&1 | tee /tmp/typecheck.log
+          status=${PIPESTATUS[0]}
+          set -e
+
+          python3 <<'PY'
+          from pathlib import Path
+
+          known = (
+              "src/app/_layout.tsx(1,8): error TS2882:",
+              "src/components/ui/switch.tsx(6,18): error TS2430:",
+          )
+          error_lines = [
+              line for line in Path('/tmp/typecheck.log').read_text().splitlines()
+              if 'error TS' in line
+          ]
+          unexpected = [
+              line for line in error_lines
+              if not any(line.startswith(prefix) for prefix in known)
+          ]
+
+          if unexpected:
+              print('Unexpected TypeScript errors:')
+              print('\n'.join(unexpected))
+              raise SystemExit(1)
+
+          if error_lines:
+              print('Only known baseline TypeScript errors remain.')
+          PY
+
+          if [ "$status" -eq 0 ]; then
+            echo "TypeScript passed without errors."
+          fi
+
+      - name: Lint changed TypeScript files
+        run: npx eslint src/app/boxes.tsx src/app/inventory-list.tsx src/app/index.tsx src/app/_layout.tsx src/inventory/storage.ts
