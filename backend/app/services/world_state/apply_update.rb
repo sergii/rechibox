@@ -6,6 +6,8 @@ module WorldState
     CONTRACT_VERSION = "0.1"
     OPERATIONS = %w[assert correct supersede].freeze
     PREDICATES = %w[ownership custody location disposition contains attribute].freeze
+    SINGLETON_PREDICATES = %w[custody location disposition attribute].freeze
+    SOURCES = %w[user observed inferred imported].freeze
 
     def initialize(world_id:, update:, store: Store.default)
       @world_id = world_id
@@ -51,10 +53,19 @@ module WorldState
       key = @update["key"].to_s.strip
       raise ArgumentError, "attribute updates require key" if predicate == "attribute" && key.empty?
 
+      source = @update.fetch("source", "user").to_s
+      raise ArgumentError, "unsupported state update source" unless SOURCES.include?(source)
+
+      confidence = Float(@update.fetch("confidence", 1.0))
+      raise ArgumentError, "confidence must be between 0 and 1" unless confidence.between?(0.0, 1.0)
+
       if %w[correct supersede].include?(operation)
         target = @update.fetch("target_claim_id").to_s
         raise ArgumentError, "target_claim_id must not be blank" if target.empty?
       end
+    rescue TypeError, ArgumentError => e
+      raise e if e.message.start_with?("unsupported", "attribute", "confidence", "subject", "object", "target")
+      raise ArgumentError, "confidence must be between 0 and 1"
     end
 
     def validate_subject!(world)
@@ -89,8 +100,16 @@ module WorldState
     end
 
     def assert_claim(world)
-      claim = build_claim
-      world.fetch("claims") << claim
+      existing = active_claims_for_slot(world)
+      object = normalized_object
+
+      return world if existing.any? { |claim| claim["object"] == object }
+
+      if singleton_predicate? && existing.any?
+        raise ArgumentError, "active claim exists; use correct or supersede"
+      end
+
+      world.fetch("claims") << build_claim
       world
     end
 
@@ -100,6 +119,7 @@ module WorldState
       raise ArgumentError, "target claim is not active" unless target["status"] == "active"
       raise ArgumentError, "target claim subject does not match" unless target["subject_id"] == @update.fetch("subject_id")
       raise ArgumentError, "target claim predicate does not match" unless target["predicate"] == @update.fetch("predicate")
+      raise ArgumentError, "target claim key does not match" unless target["key"].to_s == normalized_key.to_s
 
       replacement = build_claim("replaces_claim_id" => target.fetch("id"))
       target["status"] = terminal_status
@@ -107,6 +127,19 @@ module WorldState
       target["ended_at"] = Time.now.utc.iso8601(6)
       world.fetch("claims") << replacement
       world
+    end
+
+    def active_claims_for_slot(world)
+      world.fetch("claims").select do |claim|
+        claim["status"] == "active" &&
+          claim["subject_id"] == @update.fetch("subject_id") &&
+          claim["predicate"] == @update.fetch("predicate") &&
+          claim["key"].to_s == normalized_key.to_s
+      end
+    end
+
+    def singleton_predicate?
+      SINGLETON_PREDICATES.include?(@update.fetch("predicate"))
     end
 
     def build_claim(extra = {})
@@ -118,7 +151,7 @@ module WorldState
         "key" => normalized_key,
         "status" => "active",
         "source" => @update.fetch("source", "user"),
-        "confidence" => @update.fetch("confidence", 1.0),
+        "confidence" => Float(@update.fetch("confidence", 1.0)),
         "asserted_at" => Time.now.utc.iso8601(6),
         "provenance" => @update.fetch("provenance", {})
       }.merge(extra).compact
