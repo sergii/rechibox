@@ -10,7 +10,8 @@ module Conversations
       store: Store.default,
       world_store: WorldState::Store.default,
       state_update_proposer: Ai::StateUpdateProposer.default,
-      clarification_store: WorldState::ClarificationStore.default
+      clarification_store: WorldState::ClarificationStore.default,
+      turn_store: TurnStore.default
     )
       @conversation_id = conversation_id
       @message = message.to_s.strip
@@ -19,6 +20,7 @@ module Conversations
       @world_store = world_store
       @state_update_proposer = state_update_proposer
       @clarification_store = clarification_store
+      @turn_store = turn_store
     end
 
     def call
@@ -34,6 +36,8 @@ module Conversations
       end
 
       user_message = build_message(role: "user", text: @message)
+      turn = @turn_store.create(conversation_id: @conversation_id, message_id: user_message.fetch("id"))
+
       advice = Advice::Generate.new(
         message: @message,
         history: history,
@@ -60,6 +64,7 @@ module Conversations
         resolution: entity_resolution,
         conversation_id: @conversation_id,
         message_id: user_message.fetch("id"),
+        turn_id: turn.fetch("id"),
         situation: advice.fetch("situation"),
         store: @clarification_store
       ).call
@@ -92,10 +97,17 @@ module Conversations
       end
 
       updated = @store.append(id: @conversation_id, messages: new_messages)
+      turn = finalize_turn(
+        turn: turn,
+        clarifications: clarifications,
+        proposals: proposal_result.fetch("proposals"),
+        trace_id: advice["trace_id"]
+      )
 
       {
         "conversation" => updated,
-        "conversation_status" => clarifications.empty? ? "ready" : "awaiting_clarification",
+        "conversation_status" => turn.fetch("status"),
+        "turn" => turn,
         "world_state" => updated_world,
         "entity_resolution" => entity_resolution,
         "identity_clarifications" => clarifications,
@@ -103,9 +115,38 @@ module Conversations
         "state_update_proposal_mode" => proposal_result.fetch("mode"),
         "state_update_proposals" => proposal_result.fetch("proposals")
       }
+    rescue StandardError => e
+      mark_failed_turn(turn, e) if defined?(turn) && turn
+      raise
     end
 
     private
+
+    def finalize_turn(turn:, clarifications:, proposals:, trace_id:)
+      @turn_store.update(conversation_id: @conversation_id, id: turn.fetch("id")) do |record|
+        record["status"] = if clarifications.any?
+          "awaiting_clarification"
+        elsif proposals.any?
+          "ready_for_review"
+        else
+          "completed"
+        end
+        record["clarification_ids"] = clarifications.map { |row| row.fetch("id") }
+        record["proposal_ids"] = proposals.map { |row| row.fetch("id") }
+        record["trace_id"] = trace_id if trace_id
+        record["completed_at"] = Time.now.utc.iso8601(6) if record["status"] == "completed"
+      end
+    end
+
+    def mark_failed_turn(turn, error)
+      @turn_store.update(conversation_id: @conversation_id, id: turn.fetch("id")) do |record|
+        record["status"] = "failed"
+        record["error"] = { "class" => error.class.name, "message" => error.message }
+        record["failed_at"] = Time.now.utc.iso8601(6)
+      end
+    rescue StandardError
+      nil
+    end
 
     def build_message(role:, text:, trace_id: nil)
       {
