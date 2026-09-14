@@ -16,7 +16,7 @@ export default function HomeScreen() {
         </View>
         <Text style={[styles.description, { color: colors.text }]}>Простір для ваших речей.</Text>
         <Text style={[styles.note, { color: colors.text }]}>
-          Спробуйте вибір боксу або додайте речі через AI-інвентар. Підтверджені речі зберігаються локально на цьому пристрої.
+          Створюйте коробки, додавайте речі через AI-інвентар і зберігайте зв’язок між фізичною коробкою та її вмістом локально на цьому пристрої.
         </Text>
         <Pressable
           accessibilityRole="button"
@@ -35,6 +35,15 @@ export default function HomeScreen() {
             { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
           ]}>
           <Text style={[styles.secondaryButtonText, { color: colors.text }]}>Додати речі через AI</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push('/boxes')}
+          style={({ pressed }) => [
+            styles.secondaryButton,
+            { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
+          ]}>
+          <Text style={[styles.secondaryButtonText, { color: colors.text }]}>Мої коробки</Text>
         </Pressable>
         <Pressable
           accessibilityRole="button"
