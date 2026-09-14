@@ -1,4 +1,6 @@
 require "test_helper"
+require "json"
+require "tmpdir"
 
 class ApiAdviceTest < ActionDispatch::IntegrationTest
   setup do
@@ -14,7 +16,9 @@ class ApiAdviceTest < ActionDispatch::IntegrationTest
     body = response.parsed_body
     assert_equal "model_free", body.fetch("mode")
     assert_equal "disabled", body.fetch("answer_mode")
+    assert_equal "disabled", body.fetch("trace_mode")
     assert_not body.key?("answer")
+    assert_not body.key?("trace_id")
     assert_equal "0.1", body.dig("situation", "contract_version")
     assert_equal message, body.dig("situation", "raw_input")
     assert_empty body.dig("situation", "facts")
@@ -22,6 +26,37 @@ class ApiAdviceTest < ActionDispatch::IntegrationTest
     assert_includes body.dig("retrieval", "candidates").map { |candidate| candidate.fetch("id") }, "ORG-PR-0001"
     assert_equal body.dig("retrieval", "candidates").map { |candidate| candidate.fetch("id") },
                  body.dig("context", "knowledge").map { |record| record.fetch("id") }
+  end
+
+  test "raw advice can persist a reproducible JSONL trace" do
+    Dir.mktmpdir do |dir|
+      previous_store = ENV["AI_TRACE_STORE"]
+      previous_path = ENV["AI_TRACE_PATH"]
+      ENV["AI_TRACE_STORE"] = "jsonl"
+      ENV["AI_TRACE_PATH"] = File.join(dir, "ai-runs.jsonl")
+
+      post "/api/advice", params: {
+        message: "Третій день перекладаю коробки з підлоги на диван.",
+        limit: 2
+      }, as: :json
+
+      assert_response :success
+      body = response.parsed_body
+      assert_equal "jsonl", body.fetch("trace_mode")
+      assert body.fetch("trace_id").present?
+
+      trace = JSON.parse(File.read(ENV.fetch("AI_TRACE_PATH")))
+      assert_equal body.fetch("trace_id"), trace.fetch("id")
+      assert_equal "0.1", trace.fetch("trace_version")
+      assert_equal "lexical-idf-prefix5-v0.1", trace.fetch("retrieval_strategy")
+      assert_equal body.dig("retrieval", "candidates").map { |candidate| candidate.fetch("id") },
+                   trace.fetch("retrieved_knowledge").map { |record| record.fetch("id") }
+      assert_nil trace.dig("usage", "input_tokens")
+      assert_nil trace.dig("usage", "cost_usd")
+    ensure
+      ENV["AI_TRACE_STORE"] = previous_store
+      ENV["AI_TRACE_PATH"] = previous_path
+    end
   end
 
   test "raw message rejects blank input" do
