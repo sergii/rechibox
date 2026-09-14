@@ -6,6 +6,10 @@ Rails.application.routes.draw do
     resources :worlds, only: %i[create show] do
       post "updates", to: "worlds#update_state", on: :member
       post "proposals", to: "worlds#propose_updates", on: :member
+      get "proposals", to: "worlds#proposals", on: :member
+      get "proposals/:proposal_id", to: "worlds#proposal", on: :member
+      post "proposals/:proposal_id/accept", to: "worlds#accept_proposal", on: :member
+      post "proposals/:proposal_id/reject", to: "worlds#reject_proposal", on: :member
     end
 
     resources :conversations, only: %i[create show] do
