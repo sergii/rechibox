@@ -10,6 +10,20 @@ module Api
       render json: { error: e.message }, status: :not_found
     end
 
+    def resolve_entities
+      world = WorldState::Store.default.fetch(params.require(:id))
+      result = WorldState::ResolveEntities.new(
+        world: world,
+        situation: params.require(:situation).to_unsafe_h
+      ).call
+
+      render json: result
+    rescue ActionController::ParameterMissing, ArgumentError => e
+      render json: { error: e.message }, status: :unprocessable_entity
+    rescue KeyError => e
+      render json: { error: e.message }, status: :not_found
+    end
+
     def update_state
       result = WorldState::ApplyUpdate.new(
         world_id: params.require(:id),
