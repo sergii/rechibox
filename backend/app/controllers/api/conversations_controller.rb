@@ -36,6 +36,21 @@ module Api
       render json: { error: e.message }, status: :service_unavailable
     end
 
+    def resume_clarification
+      result = Conversations::ResumeClarification.new(
+        conversation_id: params.require(:id),
+        clarification_id: params.require(:clarification_id),
+        action: params.require(:action),
+        option_id: params[:option_id]
+      ).call
+
+      render json: result
+    rescue ActionController::ParameterMissing, ArgumentError => e
+      render json: { error: e.message }, status: :unprocessable_entity
+    rescue KeyError => e
+      render json: { error: e.message }, status: :not_found
+    end
+
     private
 
     def optional_limit

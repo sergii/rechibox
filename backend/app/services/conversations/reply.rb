@@ -46,12 +46,6 @@ module Conversations
         situation: advice.fetch("situation")
       ).call
 
-      clarifications = WorldState::BuildClarifications.new(
-        world_id: world.fetch("id"),
-        resolution: entity_resolution,
-        store: @clarification_store
-      ).call
-
       updated_world = WorldState::ProjectSituation.new(
         world_id: world.fetch("id"),
         situation: advice.fetch("situation"),
@@ -61,13 +55,32 @@ module Conversations
         store: @world_store
       ).call
 
-      proposal_situation = advice.fetch("situation").merge(
-        "entity_resolutions" => entity_resolution.fetch("resolutions")
-      )
-      proposals = @state_update_proposer.call(
-        situation: proposal_situation,
-        world_state: updated_world
-      )
+      clarifications = WorldState::BuildClarifications.new(
+        world_id: world.fetch("id"),
+        resolution: entity_resolution,
+        conversation_id: @conversation_id,
+        message_id: user_message.fetch("id"),
+        situation: advice.fetch("situation"),
+        store: @clarification_store
+      ).call
+
+      proposal_result = if clarifications.empty?
+        WorldState::ProposeUpdates.new(
+          world_id: world.fetch("id"),
+          situation: advice.fetch("situation").merge(
+            "entity_resolutions" => entity_resolution.fetch("resolutions")
+          ),
+          proposer: @state_update_proposer,
+          store: @world_store
+        ).call
+      else
+        {
+          "mode" => @state_update_proposer.mode,
+          "world_id" => world.fetch("id"),
+          "proposals" => [],
+          "usage" => @state_update_proposer.usage
+        }
+      end
 
       new_messages = [user_message]
       if advice["answer"]
@@ -82,12 +95,13 @@ module Conversations
 
       {
         "conversation" => updated,
+        "conversation_status" => clarifications.empty? ? "ready" : "awaiting_clarification",
         "world_state" => updated_world,
         "entity_resolution" => entity_resolution,
         "identity_clarifications" => clarifications,
         "advice" => advice,
-        "state_update_proposal_mode" => @state_update_proposer.mode,
-        "state_update_proposals" => proposals
+        "state_update_proposal_mode" => proposal_result.fetch("mode"),
+        "state_update_proposals" => proposal_result.fetch("proposals")
       }
     end
 

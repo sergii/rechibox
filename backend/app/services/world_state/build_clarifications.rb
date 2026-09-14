@@ -2,9 +2,19 @@ module WorldState
   class BuildClarifications
     MAX_OPTIONS = 3
 
-    def initialize(world_id:, resolution:, store: ClarificationStore.default)
+    def initialize(
+      world_id:,
+      resolution:,
+      conversation_id: nil,
+      message_id: nil,
+      situation: nil,
+      store: ClarificationStore.default
+    )
       @world_id = world_id
       @resolution = resolution.to_h
+      @conversation_id = conversation_id
+      @message_id = message_id
+      @situation = situation&.to_h
       @store = store
     end
 
@@ -24,13 +34,25 @@ module WorldState
               "label" => row.fetch("label")
             },
             "question" => build_question(row.fetch("label"), candidates),
-            "options" => candidates.each_with_index.map { |candidate, index| build_option(candidate, index) }
-          }
+            "options" => candidates.each_with_index.map { |candidate, index| build_option(candidate, index) },
+            "resume_context" => resume_context
+          }.compact
         )
       end
     end
 
     private
+
+    def resume_context
+      return unless @conversation_id && @message_id && @situation
+
+      {
+        "conversation_id" => @conversation_id,
+        "message_id" => @message_id,
+        "situation" => @situation,
+        "entity_resolution" => @resolution
+      }
+    end
 
     def build_question(label, candidates)
       labels = candidates.map { |candidate| candidate.fetch("label") }
