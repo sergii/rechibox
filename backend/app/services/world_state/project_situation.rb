@@ -36,7 +36,7 @@ module WorldState
           existing["attributes"] = existing.fetch("attributes", {}).merge(entity["attributes"] || {})
           existing["aliases"] = merge_aliases(existing, label)
           existing["last_seen_message_id"] = @message_id
-        else
+        elsif safe_to_create_entity?(entity)
           world.fetch("entities") << {
             "id" => SecureRandom.uuid,
             "kind" => kind,
@@ -51,10 +51,22 @@ module WorldState
     end
 
     def resolved_entity(world, entity)
-      resolution = resolutions_by_ref[entity["ref"].to_s]
+      resolution = resolution_for(entity)
       return unless resolution&.fetch("status", nil) == "resolved"
 
       world.fetch("entities").find { |candidate| candidate.fetch("id") == resolution.fetch("durable_entity_id") }
+    end
+
+    def safe_to_create_entity?(entity)
+      resolution = resolution_for(entity)
+      return true unless resolution
+      return false if resolution.fetch("status", nil) == "ambiguous"
+
+      resolution.fetch("status", nil) == "unresolved" && Array(resolution["candidates"]).empty?
+    end
+
+    def resolution_for(entity)
+      resolutions_by_ref[entity["ref"].to_s]
     end
 
     def exact_entity(world, kind:, label:)
