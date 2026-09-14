@@ -26,6 +26,10 @@ class ApiAdviceTest < ActionDispatch::IntegrationTest
     assert_includes body.dig("retrieval", "candidates").map { |candidate| candidate.fetch("id") }, "ORG-PR-0001"
     assert_equal body.dig("retrieval", "candidates").map { |candidate| candidate.fetch("id") },
                  body.dig("context", "knowledge").map { |record| record.fetch("id") }
+    assert body.dig("metrics", "timings_ms", "total") >= 0
+    assert body.dig("metrics", "timings_ms", "retrieval") >= 0
+    assert_nil body.dig("metrics", "usage", "total", "input_tokens")
+    assert_nil body.dig("metrics", "usage", "total", "estimated_cost_usd")
   end
 
   test "raw advice can persist a reproducible JSONL trace" do
@@ -47,12 +51,13 @@ class ApiAdviceTest < ActionDispatch::IntegrationTest
 
       trace = JSON.parse(File.read(ENV.fetch("AI_TRACE_PATH")))
       assert_equal body.fetch("trace_id"), trace.fetch("id")
-      assert_equal "0.1", trace.fetch("trace_version")
+      assert_equal "0.2", trace.fetch("trace_version")
       assert_equal "lexical-idf-prefix5-v0.1", trace.fetch("retrieval_strategy")
       assert_equal body.dig("retrieval", "candidates").map { |candidate| candidate.fetch("id") },
                    trace.fetch("retrieved_knowledge").map { |record| record.fetch("id") }
+      assert_equal body.dig("metrics", "timings_ms"), trace.fetch("timings_ms")
       assert_nil trace.dig("usage", "input_tokens")
-      assert_nil trace.dig("usage", "cost_usd")
+      assert_nil trace.dig("usage", "estimated_cost_usd")
     ensure
       ENV["AI_TRACE_STORE"] = previous_store
       ENV["AI_TRACE_PATH"] = previous_path
