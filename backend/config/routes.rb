@@ -4,6 +4,8 @@ Rails.application.routes.draw do
     post "advice/dry_run", to: "advice#dry_run"
 
     resources :worlds, only: %i[create show] do
+      get "entities", to: "world_queries#entities", on: :member
+      get "claims", to: "world_queries#claims", on: :member
       post "resolve_entities", to: "worlds#resolve_entities", on: :member
       get "clarifications", to: "worlds#clarifications", on: :member
       get "clarifications/:clarification_id", to: "worlds#clarification", on: :member
