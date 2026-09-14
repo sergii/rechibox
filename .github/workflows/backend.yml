@@ -17,6 +17,23 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: rechibox_backend_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/rechibox_backend_test
+      PERSISTENCE_ADAPTER: active_record
     defaults:
       run:
         working-directory: backend
@@ -27,5 +44,7 @@ jobs:
           ruby-version: '3.3.12'
           bundler-cache: true
           working-directory: backend
+      - name: Prepare database
+        run: bundle exec rails db:prepare
       - name: Run backend tests
         run: bundle exec rails test
