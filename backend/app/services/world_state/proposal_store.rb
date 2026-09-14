@@ -1,6 +1,9 @@
 module WorldState
   class ProposalStore
     def self.default
+      Persistence.validate!
+      return ProposalStores::ActiveRecord.new if Persistence.active_record?
+
       ProposalStores::JsonDirectory.new
     end
 
