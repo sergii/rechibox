@@ -3,7 +3,7 @@ module Advice
     def initialize(
       message:,
       limit: nil,
-      extractor: Ai::SituationExtractors::Passthrough.new,
+      extractor: Ai::SituationExtractor.default,
       catalog: Knowledge::Catalog.default
     )
       @message = message
@@ -22,7 +22,7 @@ module Advice
       records = retrieval.fetch("candidates").map { |candidate| @catalog.fetch(candidate.fetch("id")) }
 
       {
-        "mode" => "model_free",
+        "mode" => @extractor.mode,
         "situation" => situation,
         "retrieval" => retrieval,
         "context" => Ai::ContextComposer.new(
