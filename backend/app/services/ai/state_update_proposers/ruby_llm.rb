@@ -22,6 +22,23 @@ module Ai
         Prefer no proposal over a speculative proposal.
       TEXT
 
+      class << self
+        def nullable_string_schema
+          { anyOf: [{ type: "string" }, { type: "null" }] }
+        end
+
+        def nullable_primitive_schema
+          {
+            anyOf: [
+              { type: "string" },
+              { type: "number" },
+              { type: "boolean" },
+              { type: "null" }
+            ]
+          }
+        end
+      end
+
       SCHEMA = {
         name: "RechiboxStateUpdateProposalsV01",
         schema: {
@@ -59,25 +76,6 @@ module Ai
           }
         }
       }.freeze
-
-      class << self
-        private
-
-        def nullable_string_schema
-          { anyOf: [{ type: "string" }, { type: "null" }] }
-        end
-
-        def nullable_primitive_schema
-          {
-            anyOf: [
-              { type: "string" },
-              { type: "number" },
-              { type: "boolean" },
-              { type: "null" }
-            ]
-          }
-        end
-      end
 
       def initialize(model: ENV["AI_STATE_UPDATE_MODEL"], chat: nil)
         @chat = chat || build_chat(model)
