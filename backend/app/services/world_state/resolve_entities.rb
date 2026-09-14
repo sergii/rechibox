@@ -47,6 +47,8 @@ module WorldState
 
     def candidate_entities(kind:)
       Array(@world["entities"]).select do |entity|
+        next false if entity["status"] == "merged"
+
         candidate_kind = entity.fetch("kind", "other").to_s
         kind == "other" || candidate_kind == kind
       end
