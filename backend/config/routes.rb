@@ -6,6 +6,8 @@ Rails.application.routes.draw do
     resources :worlds, only: %i[create show] do
       get "entities", to: "world_queries#entities", on: :member
       get "claims", to: "world_queries#claims", on: :member
+      get "graph", to: "world_queries#graph", on: :member
+      get "entities/:entity_id/physical_location", to: "world_queries#physical_location", on: :member
       post "resolve_entities", to: "worlds#resolve_entities", on: :member
       get "clarifications", to: "worlds#clarifications", on: :member
       get "clarifications/:clarification_id", to: "worlds#clarification", on: :member
