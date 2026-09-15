@@ -88,6 +88,29 @@ The resume response includes `pending_clarification_ids` for turn-backed clarifi
 
 Legacy clarification records without a `turn_id` keep the pre-turn resume behavior for compatibility.
 
+### Atomic turn-backed resume
+
+With the default ActiveRecord/PostgreSQL adapter, a turn-backed clarification resume runs inside one `Persistence.transaction`. The conversation turn row is locked first and acts as the serialization point for every clarification answer linked to that turn.
+
+The transaction covers:
+
+```text
+lock conversation turn
+  -> re-read clarification and resume context
+  -> answer clarification
+  -> read sibling clarification states
+  -> enforce the clarification barrier
+  -> generate/persist proposals when the barrier closes
+  -> transition the same turn
+  -> commit
+```
+
+This prevents two concurrent sibling answers from both observing the other sibling as still pending and committing a permanently stuck `awaiting_clarification` turn. It also gives failure atomicity: if final resume work raises before commit, the clarification answer, proposal persistence, and turn transition roll back together.
+
+The legacy JSON-directory adapter still serializes writes only through its individual file locks. `Persistence.transaction` is a no-op there, so it does not provide cross-file rollback atomicity.
+
+The RubyLLM state update proposer remains opt-in. If enabled, proposal generation currently occurs inside this correctness transaction. That keeps durable resume state atomic but can hold the turn lock across provider latency. Before enabling model-backed proposal generation at production scale, proposal computation should be split from the short durable commit phase with an explicit recoverable finalization state.
+
 ## Proposal review completion
 
 Proposals generated for a conversation turn persist `conversation_id`, `message_id`, and `turn_id`. This links the durable review object back to the workflow that created it without changing the typed World State update contract.
@@ -123,4 +146,4 @@ Proposal review does not infer completion from UI behavior. Only persisted termi
 
 ## Cost
 
-Turn state and clarification barrier handling are deterministic and model-free. They add no model calls.
+Turn state and clarification barrier handling are deterministic and model-free. They add no model calls. The separate State Update Proposer remains disabled by default and is not enabled by this lifecycle work.
