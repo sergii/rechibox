@@ -130,6 +130,38 @@ class WorldStateApplyUpdateTest < ActiveSupport::TestCase
     assert_includes error.message, "require key"
   end
 
+  test "rejects a merged tombstone as the update subject" do
+    alias_id = merged_entity_id
+
+    error = assert_raises(ArgumentError) do
+      apply(
+        "operation" => "assert",
+        "predicate" => "location",
+        "subject_id" => alias_id,
+        "object" => { "entity_id" => @garage_id }
+      )
+    end
+
+    assert_includes error.message, "subject entity is merged"
+    assert_includes error.message, "canonical entity id"
+  end
+
+  test "rejects a merged tombstone as an entity-valued object" do
+    alias_id = merged_entity_id
+
+    error = assert_raises(ArgumentError) do
+      apply(
+        "operation" => "assert",
+        "predicate" => "contains",
+        "subject_id" => @box_id,
+        "object" => { "entity_id" => alias_id }
+      )
+    end
+
+    assert_includes error.message, "object entity is merged"
+    assert_includes error.message, "canonical entity id"
+  end
+
   private
 
   def apply(update)
@@ -138,5 +170,20 @@ class WorldStateApplyUpdateTest < ActiveSupport::TestCase
       update: { "contract_version" => "0.1" }.merge(update),
       store: @store
     ).call
+  end
+
+  def merged_entity_id
+    alias_id = SecureRandom.uuid
+    @store.update(id: @world.fetch("id")) do |world|
+      world.fetch("entities") << {
+        "id" => alias_id,
+        "kind" => "container",
+        "label" => "old blue box",
+        "status" => "merged",
+        "merged_into_entity_id" => @box_id,
+        "attributes" => {}
+      }
+    end
+    alias_id
   end
 end
