@@ -76,7 +76,10 @@ module Conversations
             "entity_resolutions" => entity_resolution.fetch("resolutions")
           ),
           proposer: @state_update_proposer,
-          store: @world_store
+          store: @world_store,
+          conversation_id: @conversation_id,
+          message_id: user_message.fetch("id"),
+          turn_id: turn.fetch("id")
         ).call
       else
         {
