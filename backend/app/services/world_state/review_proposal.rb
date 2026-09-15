@@ -94,14 +94,9 @@ module WorldState
         statuses = proposal_ids.map do |proposal_id|
           @proposal_store.fetch(world_id: @world_id, id: proposal_id).fetch("status")
         end
+        target_status = statuses.all? { |status| TERMINAL_STATUSES.include?(status) } ? "completed" : "ready_for_review"
 
-        if statuses.all? { |status| TERMINAL_STATUSES.include?(status) }
-          turn["status"] = "completed"
-          turn["completed_at"] ||= Time.now.utc.iso8601(6)
-        else
-          turn["status"] = "ready_for_review"
-          turn.delete("completed_at")
-        end
+        Conversations::TurnState.transition!(turn, to: target_status)
       end
     end
 

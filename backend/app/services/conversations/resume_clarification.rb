@@ -87,11 +87,10 @@ module Conversations
       return unless turn_id
 
       @turn_store.update(conversation_id: @conversation_id, id: turn_id) do |record|
-        record["status"] = status
+        TurnState.transition!(record, to: status)
         record["resolved_clarification_ids"] ||= []
         record["resolved_clarification_ids"] << clarification.fetch("id") unless record["resolved_clarification_ids"].include?(clarification.fetch("id"))
         record["proposal_ids"] = proposals.map { |row| row.fetch("id") }
-        record["completed_at"] = Time.now.utc.iso8601(6) if status == "completed"
       end
     end
 

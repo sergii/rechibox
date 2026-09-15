@@ -127,25 +127,25 @@ module Conversations
 
     def finalize_turn(turn:, clarifications:, proposals:, trace_id:)
       @turn_store.update(conversation_id: @conversation_id, id: turn.fetch("id")) do |record|
-        record["status"] = if clarifications.any?
+        target_status = if clarifications.any?
           "awaiting_clarification"
         elsif proposals.any?
           "ready_for_review"
         else
           "completed"
         end
+
+        TurnState.transition!(record, to: target_status)
         record["clarification_ids"] = clarifications.map { |row| row.fetch("id") }
         record["proposal_ids"] = proposals.map { |row| row.fetch("id") }
         record["trace_id"] = trace_id if trace_id
-        record["completed_at"] = Time.now.utc.iso8601(6) if record["status"] == "completed"
       end
     end
 
     def mark_failed_turn(turn, error)
       @turn_store.update(conversation_id: @conversation_id, id: turn.fetch("id")) do |record|
-        record["status"] = "failed"
+        TurnState.transition!(record, to: "failed")
         record["error"] = { "class" => error.class.name, "message" => error.message }
-        record["failed_at"] = Time.now.utc.iso8601(6)
       end
     rescue StandardError
       nil

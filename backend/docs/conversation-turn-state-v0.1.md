@@ -10,6 +10,37 @@ Conversation Turn State makes each user turn a durable workflow object instead o
 - `completed` - the turn finished without pending clarification or proposal review work
 - `failed` - processing raised an error after turn creation
 
+## State machine
+
+`Conversations::TurnState` is the single deterministic transition policy for turn lifecycle changes. Services may decide the desired next state, but they must not assign `turn["status"]` directly.
+
+Legal transitions are:
+
+```text
+processing
+  -> awaiting_clarification
+  -> ready_for_review
+  -> completed
+  -> failed
+
+awaiting_clarification
+  -> ready_for_review
+  -> completed
+
+ready_for_review
+  -> completed
+
+completed
+  -> nowhere
+
+failed
+  -> nowhere
+```
+
+Applying the current state again is an idempotent no-op, which lets proposal review leave a turn in `ready_for_review` while other proposals remain pending. Any other transition fails closed with `ArgumentError`.
+
+The state machine also owns terminal lifecycle timestamps: entering `completed` records `completed_at`, and entering `failed` records `failed_at`.
+
 ## Record
 
 A turn contains a stable UUID plus:
