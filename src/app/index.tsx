@@ -34,26 +34,19 @@ export default function HomeScreen() {
   const router = useRouter();
   const scrollViewRef = useRef<ComponentRef<typeof ScrollView>>(null);
   const nextMessageId = useRef(1);
+  const configuration = getWorldQueryConfiguration();
   const [draft, setDraft] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isSending, setIsSending] = useState(false);
   const [session, setSession] = useState<WorldSession | null>(null);
-  const [isBootstrapping, setIsBootstrapping] = useState(true);
+  const [isBootstrapping, setIsBootstrapping] = useState(configuration.ready);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
-  const configuration = getWorldQueryConfiguration();
 
   useEffect(() => {
-    if (!configuration.ready) {
-      setSession(null);
-      setBootstrapError(null);
-      setIsBootstrapping(false);
-      return;
-    }
+    if (!configuration.ready) return;
 
     let cancelled = false;
-    setIsBootstrapping(true);
-    setBootstrapError(null);
 
     void bootstrapWorldSession()
       .then((nextSession) => {
@@ -73,6 +66,12 @@ export default function HomeScreen() {
       cancelled = true;
     };
   }, [bootstrapAttempt, configuration.apiUrl, configuration.ready]);
+
+  const retryBootstrap = () => {
+    setBootstrapError(null);
+    setIsBootstrapping(true);
+    setBootstrapAttempt((current) => current + 1);
+  };
 
   const appendMessage = (message: Omit<ChatMessage, 'id'>) => {
     const id = nextMessageId.current;
@@ -238,7 +237,7 @@ export default function HomeScreen() {
               <Pressable
                 accessibilityLabel="Повторити підключення"
                 accessibilityRole="button"
-                onPress={() => setBootstrapAttempt((current) => current + 1)}>
+                onPress={retryBootstrap}>
                 <Text style={[styles.retryText, { color: colors.primary }]}>Повторити</Text>
               </Pressable>
             </View>
