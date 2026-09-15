@@ -32,7 +32,19 @@ A merge is rejected when:
 - either entity does not exist;
 - either entity is already merged into another entity;
 - the entities have incompatible kinds unless one side is `other`;
-- the pair is explicitly marked `different_entities`.
+- the pair is explicitly marked `different_entities`;
+- rewriting the alias to the canonical ID would create conflicting active singleton claims.
+
+Singleton predicates follow the same slot semantics as Typed State Update: `custody`, `location`, `disposition`, and `attribute + key`. Identity confirmation does not establish which conflicting physical-world value is correct, so a merge such as these two records is rejected rather than picking one silently:
+
+```text
+blue box --location--> shelf A
+box 3   --location--> shelf B
+
+same_entity(blue box, box 3) -> rejected
+```
+
+If the merge collapses two equivalent active singleton claims onto the same slot and value, the existing canonical claim stays active. The redundant rewritten claim is preserved as history with `status: merged_duplicate`, `duplicate_of_claim_id`, `ended_at`, and its identity rewrite provenance. This keeps one active value in the singleton slot without pretending that a physical-world correction or transition occurred.
 
 A `different_entities` decision is rejected when the pair has already been merged.
 
@@ -67,4 +79,4 @@ Create a different-entities decision:
 
 ## Persistence
 
-Identity reviews are stored inside the World State document under `identity_reviews`. This keeps the v0.1 file-backed state atomic with entity mutation and avoids a second persistence adapter for a small deterministic contract.
+Identity reviews are stored inside the World State document under `identity_reviews`. This keeps the v0.1 state mutation atomic with entity and claim mutation. With the default ActiveRecord adapter the World State document row is locked while its relational entity and claim projections are synchronized; the JSON-directory adapter keeps its file-backed compatibility path.
