@@ -3,7 +3,7 @@ import { View, Switch as RNSwitch } from "react-native";
 import { cn } from "@/lib/utils";
 import { useThemeColors } from "./theme-provider";
 
-export interface SwitchProps extends React.ComponentPropsWithoutRef<typeof RNSwitch> {
+export interface SwitchProps extends Omit<React.ComponentPropsWithoutRef<typeof RNSwitch>, "className"> {
   className?: string;
   trackColorOff?: string;
   trackColorOn?: string;
