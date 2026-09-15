@@ -1,7 +1,5 @@
 import { listInventoryBoxes, listInventoryItems } from '@/inventory/storage';
 
-import { getWorldQueryConfiguration, WorldQueryClientError } from './client';
-
 type SnapshotEntity = {
   source_ref: string;
   kind: 'container' | 'item';
@@ -17,16 +15,14 @@ export type InventorySyncResult = {
   conflicts: string[];
 };
 
-export async function syncInventoryToWorld(worldId: string): Promise<InventorySyncResult> {
+export async function syncInventoryToWorld(
+  worldId: string,
+  apiUrl: string,
+): Promise<InventorySyncResult> {
   const normalizedWorldId = worldId.trim();
-  if (!normalizedWorldId) {
-    throw new WorldQueryClientError('request_failed', 'World State id must not be blank.');
-  }
-
-  const configuration = getWorldQueryConfiguration();
-  if (!configuration.ready) {
-    throw new WorldQueryClientError('not_configured', 'Rechibox backend is not configured for this build.');
-  }
+  const normalizedApiUrl = apiUrl.trim().replace(/\/+$/, '');
+  if (!normalizedWorldId) throw new Error('World State id must not be blank.');
+  if (!normalizedApiUrl) throw new Error('Rechibox backend URL must not be blank.');
 
   const [boxes, items] = await Promise.all([listInventoryBoxes(), listInventoryItems()]);
   const entities: SnapshotEntity[] = [
@@ -52,7 +48,7 @@ export async function syncInventoryToWorld(worldId: string): Promise<InventorySy
   let response: Response;
   try {
     response = await fetch(
-      `${configuration.apiUrl}/api/worlds/${encodeURIComponent(normalizedWorldId)}/inventory_snapshot`,
+      `${normalizedApiUrl}/api/worlds/${encodeURIComponent(normalizedWorldId)}/inventory_snapshot`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -65,13 +61,13 @@ export async function syncInventoryToWorld(worldId: string): Promise<InventorySy
       },
     );
   } catch {
-    throw new WorldQueryClientError('request_failed', 'Could not sync local inventory to Rechibox.');
+    throw new Error('Could not sync local inventory to Rechibox.');
   }
 
   const payload = await readJsonObject(response);
   if (!response.ok) {
     const detail = typeof payload.error === 'string' ? payload.error : `HTTP ${response.status}`;
-    throw new WorldQueryClientError('request_failed', detail);
+    throw new Error(`Could not sync local inventory to Rechibox: ${detail}`);
   }
 
   return parseSyncResult(payload);
@@ -93,7 +89,7 @@ async function readJsonObject(response: Response): Promise<Record<string, unknow
     // Stable contract error is reported below.
   }
 
-  throw new WorldQueryClientError('invalid_response', 'Backend returned invalid inventory sync JSON.');
+  throw new Error('Backend returned invalid inventory sync JSON.');
 }
 
 function parseSyncResult(payload: Record<string, unknown>): InventorySyncResult {
@@ -109,7 +105,7 @@ function parseSyncResult(payload: Record<string, unknown>): InventorySyncResult 
     !Array.isArray(conflicts) ||
     !conflicts.every((value) => typeof value === 'string')
   ) {
-    throw new WorldQueryClientError('invalid_response', 'Backend returned an invalid inventory sync result.');
+    throw new Error('Backend returned an invalid inventory sync result.');
   }
 
   return { createdEntities, updatedEntities, locationChanges, conflicts };
