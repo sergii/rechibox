@@ -5,6 +5,7 @@ module WorldState
   class ReviewIdentity
     CONTRACT_VERSION = "0.1"
     DECISIONS = %w[same_entity different_entities].freeze
+    SINGLETON_PREDICATES = ApplyUpdate::SINGLETON_PREDICATES.freeze
 
     def initialize(world_id:, decision:, canonical_entity_id: nil, alias_entity_id: nil, left_entity_id: nil, right_entity_id: nil, reason: nil, store: Store.default)
       @world_id = world_id
@@ -46,6 +47,12 @@ module WorldState
       raise ArgumentError, "entity kinds are incompatible" unless compatible_kinds?(canonical, alias_entity)
       raise ArgumentError, "entities are explicitly different" if explicitly_different?(world, canonical.fetch("id"), alias_entity.fetch("id"))
 
+      validate_singleton_integrity_after_merge!(
+        world,
+        from_id: alias_entity.fetch("id"),
+        to_id: canonical.fetch("id")
+      )
+
       canonical["aliases"] = merged_aliases(canonical, alias_entity)
       canonical["attributes"] = alias_entity.fetch("attributes", {}).merge(canonical.fetch("attributes", {}))
       canonical["updated_at"] = Time.now.utc.iso8601(6)
@@ -55,6 +62,7 @@ module WorldState
       alias_entity["merged_at"] = Time.now.utc.iso8601(6)
 
       rewrite_claim_references(world, from_id: alias_entity.fetch("id"), to_id: canonical.fetch("id"))
+      coalesce_equivalent_singletons!(world)
 
       build_review(
         "canonical_entity_id" => canonical.fetch("id"),
@@ -116,6 +124,51 @@ module WorldState
       names.reject { |name| name.casecmp?(canonical_label) }.uniq { |name| name.downcase }
     end
 
+    # Identity rewrites can collapse two previously independent singleton slots
+    # onto one durable entity. Reject the merge before mutation when those slots
+    # carry different active values. Identity confirmation is not evidence that
+    # either physical-world claim should win.
+    def validate_singleton_integrity_after_merge!(world, from_id:, to_id:)
+      projected = active_singleton_claims(world).map do |claim|
+        {
+          claim: claim,
+          touched: claim_references_entity?(claim, from_id),
+          slot: projected_slot(claim, from_id: from_id, to_id: to_id),
+          object: projected_object(claim, from_id: from_id, to_id: to_id)
+        }
+      end
+
+      projected.group_by { |row| row.fetch(:slot) }.each_value do |rows|
+        next unless rows.any? { |row| row.fetch(:touched) }
+        next unless rows.map { |row| row.fetch(:object) }.uniq.size > 1
+
+        raise ArgumentError, "identity merge conflicts with active singleton claims"
+      end
+    end
+
+    def active_singleton_claims(world)
+      world.fetch("claims").select do |claim|
+        claim["status"] == "active" && SINGLETON_PREDICATES.include?(claim["predicate"])
+      end
+    end
+
+    def projected_slot(claim, from_id:, to_id:)
+      subject_id = claim["subject_id"] == from_id ? to_id : claim["subject_id"]
+      [subject_id, claim["predicate"], claim["key"].to_s]
+    end
+
+    def projected_object(claim, from_id:, to_id:)
+      object = claim.fetch("object", {})
+      return object unless object["type"] == "entity" && object["id"] == from_id
+
+      object.merge("id" => to_id)
+    end
+
+    def claim_references_entity?(claim, entity_id)
+      claim["subject_id"] == entity_id ||
+        (claim.dig("object", "type") == "entity" && claim.dig("object", "id") == entity_id)
+    end
+
     def rewrite_claim_references(world, from_id:, to_id:)
       world.fetch("claims").each do |claim|
         changed = false
@@ -138,6 +191,28 @@ module WorldState
           "rewritten_at" => Time.now.utc.iso8601(6)
         }
       end
+    end
+
+    # Equivalent singleton claims are safe to collapse after an identity merge.
+    # Prefer an existing canonical claim over one that had to be rewritten and
+    # preserve the duplicate as history instead of deleting it.
+    def coalesce_equivalent_singletons!(world)
+      active_singleton_claims(world)
+        .group_by { |claim| [claim["subject_id"], claim["predicate"], claim["key"].to_s] }
+        .each_value do |claims|
+          next unless claims.size > 1
+          next unless claims.any? { |claim| claim["identity_rewrite"] }
+          next unless claims.map { |claim| claim.fetch("object", {}) }.uniq.one?
+
+          winner = claims.min_by { |claim| claim["identity_rewrite"] ? 1 : 0 }
+          claims.each do |claim|
+            next if claim.equal?(winner)
+
+            claim["status"] = "merged_duplicate"
+            claim["duplicate_of_claim_id"] = winner.fetch("id")
+            claim["ended_at"] = Time.now.utc.iso8601(6)
+          end
+        end
     end
 
     def build_review(extra)
