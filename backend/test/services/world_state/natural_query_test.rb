@@ -40,7 +40,7 @@ class WorldStateNaturalQueryTest < ActiveSupport::TestCase
     end
   end
 
-  test "resolves an interpreted entity and executes the deterministic query" do
+  test "resolves an interpreted entity, executes the deterministic query, and renders an answer" do
     interpreter = FakeInterpreter.new(
       "contract_version" => "0.1",
       "mode" => "fake",
@@ -60,6 +60,9 @@ class WorldStateNaturalQueryTest < ActiveSupport::TestCase
     assert_equal @cables_id, result.dig("resolution", "durable_entity_id")
     assert_equal "where_is", result.dig("query_result", "intent")
     assert_equal [@cables_id, @box_id, @garage_id], result.dig("query_result", "result", "paths", 0, "entity_ids")
+    assert_equal "resolved", result.dig("answer", "status")
+    assert_equal "Location of “cables”: blue box → garage.", result.dig("answer", "text")
+    assert_equal 2, result.dig("answer", "supporting_claim_ids").size
   end
 
   test "does not execute query when entity resolution is ambiguous" do
@@ -85,6 +88,7 @@ class WorldStateNaturalQueryTest < ActiveSupport::TestCase
 
     assert_equal "ambiguous", result.dig("resolution", "status")
     assert_nil result["query_result"]
+    assert_equal "ambiguous", result.dig("answer", "status")
   end
 
   test "disabled interpreter makes zero-query result without reading world state" do
@@ -99,6 +103,7 @@ class WorldStateNaturalQueryTest < ActiveSupport::TestCase
     assert_equal "disabled", result.fetch("mode")
     assert_nil result["resolution"]
     assert_nil result["query_result"]
+    assert_nil result["answer"]
   end
 
   private

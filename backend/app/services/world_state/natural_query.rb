@@ -2,10 +2,16 @@ module WorldState
   class NaturalQuery
     CONTRACT_VERSION = "0.1"
 
-    def initialize(world_id:, interpreter: Ai::WorldQueryInterpreter.default, store: Store.default)
+    def initialize(
+      world_id:,
+      interpreter: Ai::WorldQueryInterpreter.default,
+      store: Store.default,
+      renderer: QueryAnswerRenderer.new
+    )
       @world_id = world_id
       @interpreter = interpreter
       @store = store
+      @renderer = renderer
     end
 
     def call(message:, max_depth: nil)
@@ -27,15 +33,23 @@ module WorldState
         "interpretation" => interpretation,
         "resolution" => resolution,
         "query_result" => nil,
+        "answer" => nil,
         "usage" => @interpreter.usage.to_h
       }
 
-      return result unless resolution.fetch("status") == "resolved"
+      if resolution.fetch("status") == "resolved"
+        result["query_result"] = Query.new(world_id: @world_id).call(
+          intent: query.fetch("intent"),
+          entity_id: resolution.fetch("durable_entity_id"),
+          max_depth: max_depth
+        )
+      end
 
-      result["query_result"] = Query.new(world_id: @world_id).call(
-        intent: query.fetch("intent"),
-        entity_id: resolution.fetch("durable_entity_id"),
-        max_depth: max_depth
+      result["answer"] = @renderer.call(
+        message: message,
+        query: query,
+        resolution: resolution,
+        query_result: result["query_result"]
       )
       result
     end
@@ -50,6 +64,7 @@ module WorldState
         "interpretation" => interpretation,
         "resolution" => nil,
         "query_result" => nil,
+        "answer" => nil,
         "usage" => @interpreter.usage.to_h
       }
     end
