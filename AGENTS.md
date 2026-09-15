@@ -41,12 +41,18 @@ android emulator / Expo Go: npm run android
 physical-device diagnostics: npm run device:check
 physical iPhone / Expo Go: npm run iphone
 physical iPhone native build: npm run iphone:native
+agent project status: npm run agent:status
+agent Expo diagnostics: npm run agent:doctor
+agent iOS smoke: npm run agent:smoke:ios
+agent Android smoke: npm run agent:smoke:android
 web: npm run web (optional preview, not a product target)
 dependency compatibility: npx expo install --check
 project diagnostics: npx expo-doctor
 ```
 
 `ios`, `android`, and `iphone` use Expo Go and do not build a product-specific native binary. `iphone:native` uses CNG plus `expo run:ios --device`; it may generate ignored `ios/` output locally, build with Xcode, install the app on a physical device, and verify native/config-plugin behavior. Local Apple signing credentials remain machine-local and must not be committed.
+
+The `agent:*` commands use a pinned experimental `@expo/agent-cli` version as the Expo-aware project/runtime layer. For meaningful user-visible changes, use `agent-device` when it is available on the development host to inspect and drive the real native UI through semantic/accessibility state and to capture reviewable evidence. `agent-device` is developer-host tooling, not a Rechibox runtime dependency. Read `docs/development/mobile-agent-harness.md` before expanding the automation stack.
 
 ## Always follow
 
@@ -86,3 +92,4 @@ Do not load every shared document for every small task. Read product/domain docu
 - Expo icons/splash assets remain development placeholders.
 - Keep code comments in English. Do not infer booking/resource models or claim backend/offline synchronization before product requirements define them.
 - Run strict TypeScript, lint, and relevant Expo checks. Inspect the running app on targeted platforms and state verification limits honestly. Camera-critical behavior should be exercised on a physical device. Expo Go can verify the JavaScript camera flow; use the native physical-device runner when config-plugin/native behavior matters.
+- For meaningful UI/interaction changes, prefer structured verification over screenshots alone: inspect the Expo/runtime state, drive the relevant native flow with `agent-device` when available, capture evidence, then run the relevant agent smoke command. A screenshot alone is not sufficient evidence for an interactive change.
