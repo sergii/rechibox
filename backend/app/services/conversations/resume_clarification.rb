@@ -59,7 +59,10 @@ module Conversations
         world_id: world_id,
         situation: situation.merge("entity_resolutions" => resolution.fetch("resolutions")),
         proposer: @state_update_proposer,
-        store: @world_store
+        store: @world_store,
+        conversation_id: @conversation_id,
+        message_id: context.fetch("message_id"),
+        turn_id: context["turn_id"]
       ).call
       proposals = proposal_result.fetch("proposals")
       turn_status = proposals.any? ? "ready_for_review" : "completed"
