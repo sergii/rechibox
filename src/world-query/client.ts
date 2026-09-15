@@ -1,3 +1,5 @@
+import { syncInventoryToWorld } from './inventory-sync';
+
 export type WorldQueryAnswerStatus =
   | 'resolved'
   | 'ambiguous'
@@ -61,6 +63,12 @@ export async function askWorld(message: string, worldId: string): Promise<Natura
       'not_configured',
       'Rechibox World State backend is not configured for this build.',
     );
+  }
+
+  try {
+    await syncInventoryToWorld(normalizedWorldId, configuration.apiUrl);
+  } catch {
+    throw new WorldQueryClientError('request_failed', 'Could not refresh your local inventory in Rechibox.');
   }
 
   let response: Response;
