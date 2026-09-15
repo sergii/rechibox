@@ -55,7 +55,7 @@ Imported local inventory must not silently overwrite stronger World State eviden
 
 ## Natural query mode
 
-The default `AI_WORLD_QUERY_INTERPRETER` is now `deterministic`. It recognizes a deliberately small set of Ukrainian, Russian, and English forms for the existing five bounded intents. Unsupported wording fails closed with no query.
+The default `AI_WORLD_QUERY_INTERPRETER` is `deterministic`. It recognizes a deliberately small set of Ukrainian and English forms for the existing five bounded intents. Unsupported wording fails closed with no query.
 
 ```sh
 AI_WORLD_QUERY_INTERPRETER=deterministic
@@ -72,7 +72,7 @@ AI_WORLD_QUERY_MODEL=<provider-model-name>
 
 The deterministic interpreter never answers directly, mutates World State, invents durable ids, or selects among ambiguous entities. It only produces a bounded intent and request-local entity label.
 
-Entity resolution includes a small Cyrillic token-prefix normalization so common Ukrainian/Russian inflections such as `синя коробка` vs `синій коробці` can still reach the deterministic ambiguity checks. It is not a general morphological analyzer.
+Entity resolution includes a small Cyrillic token-prefix normalization so common Ukrainian inflections such as `синя коробка` vs `синій коробці` can still reach the deterministic ambiguity checks. It is not a general morphological analyzer.
 
 ## Cost
 
