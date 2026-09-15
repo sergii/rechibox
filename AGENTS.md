@@ -35,7 +35,8 @@ install: npm ci
 start: npm start
 typecheck: npm run typecheck
 lint: npm run lint
-test: none (no automated test suite yet)
+test: no broad automated suite yet
+one-command local mobile verification: npm run verify:mobile
 ios simulator / Expo Go: npm run ios
 android emulator / Expo Go: npm run android
 physical-device diagnostics: npm run device:check
@@ -52,7 +53,9 @@ project diagnostics: npx expo-doctor
 
 `ios`, `android`, and `iphone` use Expo Go and do not build a product-specific native binary. `iphone:native` uses CNG plus `expo run:ios --device`; it may generate ignored `ios/` output locally, build with Xcode, install the app on a physical device, and verify native/config-plugin behavior. Local Apple signing credentials remain machine-local and must not be committed.
 
-The `agent:*` commands use a pinned experimental `@expo/agent-cli` version as the Expo-aware project/runtime layer. For meaningful user-visible changes, use `agent-device` when it is available on the development host to inspect and drive the real native UI through semantic/accessibility state and to capture reviewable evidence. `agent-device` is developer-host tooling, not a Rechibox runtime dependency. Read `docs/development/mobile-agent-harness.md` before expanding the automation stack.
+`npm run verify:mobile` is the preferred one-command local iOS UI gate. It runs TypeScript, lint, a pinned `@expo/agent-cli` local iOS smoke/navigation pass, and the deterministic `agent-device` replay under `tests/mobile/replays/`. It must remain local-only and must not silently opt into EAS or billed cloud macOS capacity. Generated verification artifacts stay under `.git/rechibox-agent-artifacts/` so the working tree remains clean.
+
+The lower-level `agent:*` commands use a pinned experimental `@expo/agent-cli` version as the Expo-aware project/runtime layer. For meaningful user-visible changes, use `agent-device` when it is available on the development host to inspect and drive the real native UI through semantic/accessibility state and to capture reviewable evidence. `agent-device` is developer-host tooling, not a Rechibox runtime dependency. Read `docs/development/mobile-agent-harness.md` before expanding the automation stack.
 
 ## Always follow
 
@@ -92,4 +95,4 @@ Do not load every shared document for every small task. Read product/domain docu
 - Expo icons/splash assets remain development placeholders.
 - Keep code comments in English. Do not infer booking/resource models or claim backend/offline synchronization before product requirements define them.
 - Run strict TypeScript, lint, and relevant Expo checks. Inspect the running app on targeted platforms and state verification limits honestly. Camera-critical behavior should be exercised on a physical device. Expo Go can verify the JavaScript camera flow; use the native physical-device runner when config-plugin/native behavior matters.
-- For meaningful UI/interaction changes, prefer structured verification over screenshots alone: inspect the Expo/runtime state, drive the relevant native flow with `agent-device` when available, capture evidence, then run the relevant agent smoke command. A screenshot alone is not sufficient evidence for an interactive change.
+- For ordinary meaningful UI/interaction changes, run `npm run verify:mobile` as the default local iOS verification gate. Drop to lower-level `agent:*` or `agent-device` commands only to diagnose failures or author new replay coverage. A screenshot alone is not sufficient evidence for an interactive change.
