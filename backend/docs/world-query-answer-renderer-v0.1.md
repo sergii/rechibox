@@ -13,7 +13,7 @@ natural language
 
 ## Contract
 
-Natural query responses now include an `answer` when an entity mention can be interpreted and resolution has been attempted:
+Natural query responses include an `answer` when an entity mention can be interpreted and resolution has been attempted:
 
 ```json
 {
@@ -52,9 +52,11 @@ Important behavior:
 
 ## Locale
 
-v0.1 uses a deliberately small deterministic locale detector for Ukrainian, Russian, and English. It does not call AI for translation or grammatical inflection. Entity labels are preserved as stored/interpreted, and templates avoid pretending to understand arbitrary label grammar.
+v0.1 renders Ukrainian and English only. Cyrillic input is treated as Ukrainian for presentation, which avoids misclassifying valid Ukrainian phrases that happen not to contain a uniquely Ukrainian letter. Latin input falls back to English.
 
-This is a presentation contract, not a localization framework. A product locale should replace message-script detection when the mobile client owns explicit locale settings.
+It does not call AI for translation or grammatical inflection. Entity labels are preserved as stored/interpreted, and templates avoid pretending to understand arbitrary label grammar.
+
+This is a presentation contract, not a localization framework. An explicit product locale should replace script detection when the mobile client owns locale settings.
 
 ## Cost
 
