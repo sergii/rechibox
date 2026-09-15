@@ -1,6 +1,7 @@
 import Storage from './storage';
 
 import { getWorldQueryConfiguration, WorldQueryClientError } from './client';
+import { syncInventoryToWorld } from './inventory-sync';
 
 const WORLD_ID_STORAGE_PREFIX = 'rechibox.world-id.v0.1:';
 
@@ -27,6 +28,7 @@ export async function bootstrapWorldSession(): Promise<WorldSession> {
   if (storedWorldId) {
     const exists = await worldExists(configuration.apiUrl, storedWorldId);
     if (exists) {
+      await syncInventoryToWorld(storedWorldId);
       return {
         apiUrl: configuration.apiUrl,
         worldId: storedWorldId,
@@ -39,6 +41,7 @@ export async function bootstrapWorldSession(): Promise<WorldSession> {
 
   const worldId = await createWorld(configuration.apiUrl);
   await Storage.setItem(storageKey, worldId);
+  await syncInventoryToWorld(worldId);
 
   return {
     apiUrl: configuration.apiUrl,
