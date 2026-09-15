@@ -1,8 +1,8 @@
 # Natural Language World Query v0.1
 
-Natural Language World Query is a narrow AI boundary in front of the deterministic World Query service.
+Natural Language World Query is a narrow interpretation boundary in front of the deterministic World Query service.
 
-It does not let the model answer from World State directly. The model may only classify one supported query intent and extract one entity mention.
+The interpreter never answers from World State directly. It may only classify one supported query intent and extract one entity mention.
 
 ## Pipeline
 
@@ -40,17 +40,23 @@ Request:
 }
 ```
 
-## Fail-closed default
+## Default mode
 
-The interpreter is disabled unless explicitly enabled:
+The default interpreter is deterministic and makes zero model calls:
+
+```sh
+AI_WORLD_QUERY_INTERPRETER=deterministic
+```
+
+It recognizes a deliberately small set of Ukrainian, Russian, and English forms for the five bounded intents. Unsupported wording fails closed with no query.
+
+The interpreter can still be disabled explicitly:
 
 ```sh
 AI_WORLD_QUERY_INTERPRETER=disabled
 ```
 
-This is also the default when the variable is absent. In disabled mode the endpoint performs no model call and returns no interpreted query.
-
-RubyLLM is opt-in:
+RubyLLM remains opt-in:
 
 ```sh
 AI_WORLD_QUERY_INTERPRETER=ruby_llm
@@ -70,7 +76,7 @@ No provider pricing is hardcoded.
 
 ## Interpretation contract
 
-The model output is constrained to:
+An interpreter produces the same bounded shape:
 
 ```json
 {
@@ -87,11 +93,11 @@ The entity ref is request-local. It is never accepted as a durable World State e
 
 Rails passes the mention through `WorldState::ResolveEntities`. Only a `resolved` result is allowed to execute `WorldState::Query`.
 
-For `ambiguous` or `unresolved`, `query_result` remains null. The model cannot pick a candidate by itself.
+For `ambiguous` or `unresolved`, `query_result` remains null. No interpreter can pick a candidate by itself.
 
 ## Safety boundary
 
-The model cannot:
+The interpreter cannot:
 
 - answer the world question directly
 - mutate World State
