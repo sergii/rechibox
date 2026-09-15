@@ -35,6 +35,18 @@ class WorldStateQueryAnswerRendererTest < ActiveSupport::TestCase
     assert_equal [claim_one, claim_two], answer.fetch("supporting_claim_ids")
   end
 
+  test "Cyrillic Ukrainian text without unique Ukrainian letters still renders Ukrainian" do
+    answer = @renderer.call(
+      message: "Де кабель?",
+      query: query("where_is", "кабель"),
+      resolution: { "status" => "unresolved" },
+      query_result: nil
+    )
+
+    assert_equal "uk", answer.fetch("locale")
+    assert_includes answer.fetch("text"), "Не вдалося"
+  end
+
   test "renders direct contents without claiming an empty container is known empty" do
     claim_id = SecureRandom.uuid
     answer = @renderer.call(
