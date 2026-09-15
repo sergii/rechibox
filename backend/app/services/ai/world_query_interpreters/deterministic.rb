@@ -4,15 +4,15 @@ module Ai
       CONTRACT_VERSION = "0.1"
 
       PATTERNS = [
-        ["contents_recursive", /\A(?:що\s+(?:все\s+)?(?:всередині|міститься\s+в)|что\s+(?:всё\s+)?(?:внутри|содержится\s+в)|what(?:'s|\s+is)\s+(?:everything\s+)?inside)\s+(.+)\z/iu],
-        ["what_is_in", /\A(?:що(?:\s+є)?\s+[ув]|что(?:\s+есть)?\s+в|what(?:'s|\s+is)\s+in)\s+(.+)\z/iu],
-        ["where_is", /\A(?:де|где)\s+(.+)\z/iu],
+        ["contents_recursive", /\A(?:що\s+(?:все\s+)?(?:всередині|міститься\s+в)|what(?:'s|\s+is)\s+(?:everything\s+)?inside)\s+(.+)\z/iu],
+        ["what_is_in", /\A(?:що(?:\s+є)?\s+[ув]|what(?:'s|\s+is)\s+in)\s+(.+)\z/iu],
+        ["where_is", /\Aде\s+(.+)\z/iu],
         ["where_is", /\Awhere\s+(?:is|are)\s+(.+)\z/iu],
-        ["who_owns", /\A(?:кому\s+належить|кому\s+принадлежит|who\s+owns)\s+(.+)\z/iu],
-        ["who_has_custody", /\A(?:хто\s+зберігає|кто\s+хранит|у\s+кого|who\s+(?:has|keeps))\s+(.+)\z/iu]
+        ["who_owns", /\A(?:кому\s+належить|who\s+owns)\s+(.+)\z/iu],
+        ["who_has_custody", /\A(?:хто\s+зберігає|who\s+(?:has|keeps))\s+(.+)\z/iu]
       ].freeze
 
-      LEADING_POSSESSIVES = /\A(?:мої|мій|моя|моє|наші|наш|наша|наше|мои|мой|моя|моё|наши|наш|наша|наше|my|our)\s+/iu
+      LEADING_POSSESSIVES = /\A(?:мої|мій|моя|моє|наші|наш|наша|наше|my|our)\s+/iu
 
       def mode
         "deterministic"
