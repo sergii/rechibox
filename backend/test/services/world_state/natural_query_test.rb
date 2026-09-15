@@ -63,9 +63,10 @@ class WorldStateNaturalQueryTest < ActiveSupport::TestCase
     assert_equal "resolved", result.dig("answer", "status")
     assert_equal "Location of “cables”: blue box → garage.", result.dig("answer", "text")
     assert_equal 2, result.dig("answer", "supporting_claim_ids").size
+    assert_nil result["clarification"]
   end
 
-  test "does not execute query when entity resolution is ambiguous" do
+  test "persists ambiguity and resumes the same query after an explicit selection" do
     second_box_id = SecureRandom.uuid
     @store.update(id: @world.fetch("id")) do |world|
       world.fetch("entities") << entity(second_box_id, "container", "blue box")
@@ -89,6 +90,59 @@ class WorldStateNaturalQueryTest < ActiveSupport::TestCase
     assert_equal "ambiguous", result.dig("resolution", "status")
     assert_nil result["query_result"]
     assert_equal "ambiguous", result.dig("answer", "status")
+    clarification = result.fetch("clarification")
+    assert_equal "pending", clarification.fetch("status")
+    assert_equal 2, clarification.fetch("options").size
+    assert_equal "natural_query", clarification.dig("resume_context", "kind")
+
+    selected = clarification.fetch("options").find { |option| option.fetch("entity_id") == @box_id }
+    resumed = WorldState::ResumeNaturalQuery.new(
+      world_id: @world.fetch("id"),
+      clarification_id: clarification.fetch("id"),
+      action: "select",
+      option_id: selected.fetch("option_id"),
+      world_store: @store
+    ).call
+
+    assert_equal "resolved", resumed.dig("clarification", "status")
+    assert_equal @box_id, resumed.dig("resolution", "durable_entity_id")
+    assert_equal "what_is_in", resumed.dig("query_result", "intent")
+    assert_equal [@cables_id], resumed.dig("query_result", "result", "entity_ids")
+    assert_equal "resolved", resumed.dig("answer", "status")
+    assert_includes resumed.dig("answer", "text"), "cables"
+  end
+
+  test "none of the clarification options closes the query without guessing" do
+    second_box_id = SecureRandom.uuid
+    @store.update(id: @world.fetch("id")) do |world|
+      world.fetch("entities") << entity(second_box_id, "container", "blue box")
+    end
+
+    interpreter = FakeInterpreter.new(
+      "contract_version" => "0.1",
+      "mode" => "fake",
+      "query" => {
+        "intent" => "what_is_in",
+        "entity" => { "ref" => "E1", "kind" => "container", "label" => "blue box" }
+      }
+    )
+
+    initial = WorldState::NaturalQuery.new(
+      world_id: @world.fetch("id"),
+      interpreter: interpreter,
+      store: @store
+    ).call(message: "What is in the blue box?")
+
+    resumed = WorldState::ResumeNaturalQuery.new(
+      world_id: @world.fetch("id"),
+      clarification_id: initial.dig("clarification", "id"),
+      action: "none_of_above",
+      world_store: @store
+    ).call
+
+    assert_equal "none_of_above", resumed.dig("clarification", "status")
+    assert_nil resumed["query_result"]
+    assert_equal "unknown", resumed.dig("answer", "status")
   end
 
   test "disabled interpreter makes zero-query result without reading world state" do
@@ -102,6 +156,7 @@ class WorldStateNaturalQueryTest < ActiveSupport::TestCase
 
     assert_equal "disabled", result.fetch("mode")
     assert_nil result["resolution"]
+    assert_nil result["clarification"]
     assert_nil result["query_result"]
     assert_nil result["answer"]
   end
