@@ -48,7 +48,7 @@ The default interpreter is deterministic and makes zero model calls:
 AI_WORLD_QUERY_INTERPRETER=deterministic
 ```
 
-It recognizes a deliberately small set of Ukrainian, Russian, and English forms for the five bounded intents. Unsupported wording fails closed with no query.
+It recognizes a deliberately small set of Ukrainian and English forms for the five bounded intents. Other wording and languages are outside this deterministic contract and fail closed with no query.
 
 The interpreter can still be disabled explicitly:
 
