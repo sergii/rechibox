@@ -11,11 +11,91 @@ class ConversationsAtomicClarificationResumeTest < ActiveSupport::TestCase
     end
   end
 
-  test "rolls back clarification and turn when final resume fails" do
+  class EmptyProposer < Ai::StateUpdateProposer
+    attr_reader :calls
+
+    def initialize
+      @calls = 0
+    end
+
+    def mode
+      "test"
+    end
+
+    def call(situation:, world_state:)
+      @calls += 1
+      []
+    end
+  end
+
+  test "commits the clarification before proposal computation and can retry finalization" do
+    setup = build_active_record_turn
+
+    error = assert_raises(RuntimeError) do
+      resume(setup: setup, proposer: ExplodingProposer.new, option_id: "1")
+    end
+    assert_equal "proposal generation failed", error.message
+
+    persisted_clarification = setup.fetch(:clarification_store).fetch(
+      world_id: setup.dig(:world, "id"),
+      id: setup.dig(:clarification, "id")
+    )
+    persisted_turn = setup.fetch(:turn_store).fetch(
+      conversation_id: setup.dig(:conversation, "id"),
+      id: setup.dig(:turn, "id")
+    )
+
+    assert_equal "resolved", persisted_clarification.fetch("status")
+    assert_equal "1", persisted_clarification.fetch("selected_option_id")
+    assert_equal "awaiting_clarification", persisted_turn.fetch("status")
+    assert_equal [setup.dig(:clarification, "id")], persisted_turn.fetch("resolved_clarification_ids")
+    assert_nil persisted_turn["proposal_ids"]
+
+    proposer = EmptyProposer.new
+    result = resume(setup: setup, proposer: proposer, option_id: "1")
+
+    assert_equal "completed", result.fetch("conversation_status")
+    assert_equal 1, proposer.calls
+    assert_empty result.fetch("state_update_proposals")
+  end
+
+  test "rejects a retry that changes an already persisted clarification answer" do
+    setup = build_active_record_turn
+
+    assert_raises(RuntimeError) do
+      resume(setup: setup, proposer: ExplodingProposer.new, option_id: "1")
+    end
+
+    error = assert_raises(ArgumentError) do
+      resume(setup: setup, proposer: EmptyProposer.new, option_id: "2")
+    end
+
+    assert_equal "clarification is already closed with a different answer", error.message
+  end
+
+  private
+
+  def resume(setup:, proposer:, option_id:)
+    Conversations::ResumeClarification.new(
+      conversation_id: setup.dig(:conversation, "id"),
+      clarification_id: setup.dig(:clarification, "id"),
+      action: "select",
+      option_id: option_id,
+      store: setup.fetch(:conversation_store),
+      world_store: setup.fetch(:world_store),
+      clarification_store: setup.fetch(:clarification_store),
+      state_update_proposer: proposer,
+      turn_store: setup.fetch(:turn_store),
+      proposal_store: setup.fetch(:proposal_store)
+    ).call
+  end
+
+  def build_active_record_turn
     world_store = WorldState::Stores::ActiveRecord.new
     conversation_store = Conversations::Stores::ActiveRecord.new
     clarification_store = WorldState::ClarificationStores::ActiveRecord.new
     turn_store = Conversations::TurnStores::ActiveRecord.new
+    proposal_store = WorldState::ProposalStores::ActiveRecord.new
 
     world = world_store.create
     blue_id = SecureRandom.uuid
@@ -70,27 +150,16 @@ class ConversationsAtomicClarificationResumeTest < ActiveSupport::TestCase
       record["clarification_ids"] = [clarification.fetch("id")]
     end
 
-    error = assert_raises(RuntimeError) do
-      Conversations::ResumeClarification.new(
-        conversation_id: conversation.fetch("id"),
-        clarification_id: clarification.fetch("id"),
-        action: "select",
-        option_id: "1",
-        store: conversation_store,
-        world_store: world_store,
-        clarification_store: clarification_store,
-        state_update_proposer: ExplodingProposer.new,
-        turn_store: turn_store
-      ).call
-    end
-    assert_equal "proposal generation failed", error.message
-
-    persisted_clarification = clarification_store.fetch(world_id: world.fetch("id"), id: clarification.fetch("id"))
-    persisted_turn = turn_store.fetch(conversation_id: conversation.fetch("id"), id: turn.fetch("id"))
-
-    assert_equal "pending", persisted_clarification.fetch("status")
-    assert_equal "awaiting_clarification", persisted_turn.fetch("status")
-    assert_nil persisted_turn["resolved_clarification_ids"]
-    assert_nil persisted_turn["proposal_ids"]
+    {
+      world_store: world_store,
+      conversation_store: conversation_store,
+      clarification_store: clarification_store,
+      turn_store: turn_store,
+      proposal_store: proposal_store,
+      world: world,
+      conversation: conversation,
+      turn: turn,
+      clarification: clarification
+    }
   end
 end

@@ -1,6 +1,7 @@
 module Conversations
   class ResumeClarification
     TERMINAL_CLARIFICATION_STATUSES = %w[resolved none_of_above].freeze
+    FINAL_TURN_STATUSES = %w[ready_for_review completed].freeze
 
     def initialize(
       conversation_id:,
@@ -11,7 +12,8 @@ module Conversations
       world_store: WorldState::Store.default,
       clarification_store: WorldState::ClarificationStore.default,
       state_update_proposer: Ai::StateUpdateProposer.default,
-      turn_store: TurnStore.default
+      turn_store: TurnStore.default,
+      proposal_store: WorldState::ProposalStore.default
     )
       @conversation_id = conversation_id
       @clarification_id = clarification_id
@@ -22,6 +24,7 @@ module Conversations
       @clarification_store = clarification_store
       @state_update_proposer = state_update_proposer
       @turn_store = turn_store
+      @proposal_store = proposal_store
     end
 
     def call
@@ -32,103 +35,184 @@ module Conversations
 
       return resume_legacy_clarification(conversation: conversation, world_id: world_id, context: context) unless context["turn_id"]
 
-      resume_transactional_turn(conversation: conversation, world_id: world_id, turn_id: context.fetch("turn_id"))
+      stage = stage_turn_resume(
+        conversation: conversation,
+        world_id: world_id,
+        turn_id: context.fetch("turn_id")
+      )
+      return stage.fetch(:response) if stage[:response]
+
+      finalize_with_proposals(
+        conversation: conversation,
+        world_id: world_id,
+        stage: stage
+      )
     end
 
     private
 
-    def resume_transactional_turn(conversation:, world_id:, turn_id:)
-      result = nil
+    # Phase one is intentionally short. It serializes sibling clarification
+    # answers on the turn row, persists the answer, and decides whether the
+    # barrier is closed. It never calls a model provider.
+    def stage_turn_resume(conversation:, world_id:, turn_id:)
+      stage = nil
 
       Persistence.transaction do
-        # The turn row is the serialization point for every clarification answer
-        # that belongs to this turn. ActiveRecord keeps this row lock until the
-        # outer transaction commits, so sibling answers cannot both observe each
-        # other as pending and leave the turn stuck behind the barrier.
         @turn_store.update(conversation_id: @conversation_id, id: turn_id) do |turn|
           clarification = @clarification_store.fetch(world_id: world_id, id: @clarification_id)
           context = resume_context!(clarification)
           raise ArgumentError, "clarification belongs to another conversation turn" unless context.fetch("turn_id") == turn.fetch("id")
 
-          answered = answer_clarification(world_id: world_id)
-          result = resume_locked_turn(
-            conversation: conversation,
-            world_id: world_id,
+          clarification_ids = Array(turn["clarification_ids"])
+          raise ArgumentError, "clarification is not linked to conversation turn" unless clarification_ids.include?(@clarification_id)
+
+          answered = answer_or_reuse_clarification(world_id: world_id, clarification: clarification)
+
+          if FINAL_TURN_STATUSES.include?(turn.fetch("status"))
+            stage = {
+              response: finalized_turn_response(
+                conversation: conversation,
+                world_id: world_id,
+                turn: turn,
+                answered: answered
+              )
+            }
+            next
+          end
+
+          clarifications = clarification_ids.map do |id|
+            @clarification_store.fetch(world_id: world_id, id: id)
+          end
+          pending = clarifications.reject { |row| TERMINAL_CLARIFICATION_STATUSES.include?(row.fetch("status")) }
+
+          if pending.any?
+            apply_turn_update!(
+              turn: turn,
+              status: "awaiting_clarification",
+              clarification: answered,
+              proposals: nil
+            )
+            stage = {
+              response: clarification_barrier_response(
+                conversation: conversation,
+                turn: turn,
+                answered: answered,
+                pending: pending
+              )
+            }
+            next
+          end
+
+          if clarifications.any? { |row| row.fetch("status") == "none_of_above" }
+            apply_turn_update!(
+              turn: turn,
+              status: "completed",
+              clarification: answered,
+              proposals: []
+            )
+            stage = {
+              response: {
+                "conversation" => conversation,
+                "conversation_status" => turn.fetch("status"),
+                "turn" => turn,
+                "clarification" => answered,
+                "pending_clarification_ids" => [],
+                "state_update_proposal_mode" => @state_update_proposer.mode,
+                "state_update_proposals" => []
+              }
+            }
+            next
+          end
+
+          apply_turn_update!(
+            turn: turn,
+            status: "awaiting_clarification",
+            clarification: answered,
+            proposals: nil
+          )
+          stage = {
             context: context,
             answered: answered,
-            turn: turn
-          )
+            clarifications: clarifications,
+            turn_id: turn.fetch("id")
+          }
         end
       end
 
-      result
+      stage
     end
 
-    def resume_locked_turn(conversation:, world_id:, context:, answered:, turn:)
-      clarification_ids = Array(turn["clarification_ids"])
-      raise ArgumentError, "clarification is not linked to conversation turn" unless clarification_ids.include?(@clarification_id)
-
-      clarifications = clarification_ids.map do |id|
-        @clarification_store.fetch(world_id: world_id, id: id)
-      end
-      pending = clarifications.reject { |row| TERMINAL_CLARIFICATION_STATUSES.include?(row.fetch("status")) }
-
-      if pending.any?
-        apply_turn_update!(
-          turn: turn,
-          status: "awaiting_clarification",
-          clarification: answered,
-          proposals: nil
-        )
-        return clarification_barrier_response(
-          conversation: conversation,
-          turn: turn,
-          answered: answered,
-          pending: pending
-        )
-      end
-
-      if clarifications.any? { |row| row.fetch("status") == "none_of_above" }
-        apply_turn_update!(
-          turn: turn,
-          status: "completed",
-          clarification: answered,
-          proposals: []
-        )
-        return {
-          "conversation" => conversation,
-          "conversation_status" => turn.fetch("status"),
-          "turn" => turn,
-          "clarification" => answered,
-          "pending_clarification_ids" => [],
-          "state_update_proposal_mode" => @state_update_proposer.mode,
-          "state_update_proposals" => []
-        }
-      end
-
-      world = @world_store.fetch(world_id)
-      situation = context.fetch("situation")
+    # Phase two computes proposal candidates without holding a database lock.
+    # With the default disabled proposer this remains model-free. If RubyLLM is
+    # explicitly enabled, provider latency happens here, outside the transaction.
+    def finalize_with_proposals(conversation:, world_id:, stage:)
+      context = stage.fetch(:context)
       resolution = resolved_resolution_set(
         original: context.fetch("entity_resolution"),
-        clarifications: clarifications
+        clarifications: stage.fetch(:clarifications)
       )
-      proposal_result = WorldState::ProposeUpdates.new(
+      situation = context.fetch("situation").merge(
+        "entity_resolutions" => resolution.fetch("resolutions")
+      )
+      proposal_service = WorldState::ProposeUpdates.new(
         world_id: world_id,
-        situation: situation.merge("entity_resolutions" => resolution.fetch("resolutions")),
+        situation: situation,
         proposer: @state_update_proposer,
         store: @world_store,
+        proposal_store: @proposal_store,
         conversation_id: @conversation_id,
         message_id: context.fetch("message_id"),
-        turn_id: turn.fetch("id")
-      ).call
-      proposals = proposal_result.fetch("proposals")
-      turn_status = proposals.any? ? "ready_for_review" : "completed"
-      apply_turn_update!(
-        turn: turn,
-        status: turn_status,
-        clarification: answered,
-        proposals: proposals
+        turn_id: stage.fetch(:turn_id)
       )
+      prepared = proposal_service.prepare
+      world = @world_store.fetch(world_id)
+      response = nil
+
+      Persistence.transaction do
+        @turn_store.update(conversation_id: @conversation_id, id: stage.fetch(:turn_id)) do |turn|
+          if FINAL_TURN_STATUSES.include?(turn.fetch("status"))
+            response = finalized_turn_response(
+              conversation: conversation,
+              world_id: world_id,
+              turn: turn,
+              answered: stage.fetch(:answered)
+            )
+            next
+          end
+
+          raise ArgumentError, "conversation turn is no longer awaiting clarification finalization" unless turn.fetch("status") == "awaiting_clarification"
+
+          persisted = proposal_service.persist(prepared: prepared)
+          proposals = persisted.fetch("proposals")
+          turn_status = proposals.any? ? "ready_for_review" : "completed"
+          apply_turn_update!(
+            turn: turn,
+            status: turn_status,
+            clarification: stage.fetch(:answered),
+            proposals: proposals
+          )
+
+          response = {
+            "conversation" => conversation,
+            "conversation_status" => turn.fetch("status"),
+            "turn" => turn,
+            "clarification" => stage.fetch(:answered),
+            "pending_clarification_ids" => [],
+            "world_state" => world,
+            "entity_resolution" => resolution,
+            "state_update_proposal_mode" => persisted.fetch("mode"),
+            "state_update_proposals" => proposals
+          }
+        end
+      end
+
+      response
+    end
+
+    def finalized_turn_response(conversation:, world_id:, turn:, answered:)
+      proposals = Array(turn["proposal_ids"]).map do |id|
+        @proposal_store.fetch(world_id: world_id, id: id)
+      end
 
       {
         "conversation" => conversation,
@@ -136,9 +220,7 @@ module Conversations
         "turn" => turn,
         "clarification" => answered,
         "pending_clarification_ids" => [],
-        "world_state" => world,
-        "entity_resolution" => resolution,
-        "state_update_proposal_mode" => proposal_result.fetch("mode"),
+        "state_update_proposal_mode" => @state_update_proposer.mode,
         "state_update_proposals" => proposals
       }
     end
@@ -170,6 +252,27 @@ module Conversations
       raise ArgumentError, "clarification belongs to another conversation" unless context.fetch("conversation_id") == @conversation_id
 
       context
+    end
+
+    def answer_or_reuse_clarification(world_id:, clarification:)
+      return answer_clarification(world_id: world_id) if clarification.fetch("status") == "pending"
+
+      unless clarification_retry_matches?(clarification)
+        raise ArgumentError, "clarification is already closed with a different answer"
+      end
+
+      clarification
+    end
+
+    def clarification_retry_matches?(clarification)
+      case clarification.fetch("status")
+      when "resolved"
+        @action == "select" && clarification.fetch("selected_option_id") == @option_id.to_s
+      when "none_of_above"
+        @action == "none_of_above"
+      else
+        false
+      end
     end
 
     def answer_clarification(world_id:)
@@ -237,6 +340,7 @@ module Conversations
         situation: situation.merge("entity_resolutions" => resolution.fetch("resolutions")),
         proposer: @state_update_proposer,
         store: @world_store,
+        proposal_store: @proposal_store,
         conversation_id: @conversation_id,
         message_id: context.fetch("message_id"),
         turn_id: nil

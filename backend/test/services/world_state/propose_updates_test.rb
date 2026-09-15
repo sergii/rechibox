@@ -40,6 +40,34 @@ class WorldStateProposeUpdatesTest < ActiveSupport::TestCase
   end
 
   test "persists conversation turn provenance on generated proposals" do
+    service, conversation_id, message_id, turn_id = build_service
+
+    result = service.call
+
+    proposal = result.fetch("proposals").sole
+    assert_equal conversation_id, proposal.fetch("conversation_id")
+    assert_equal message_id, proposal.fetch("message_id")
+    assert_equal turn_id, proposal.fetch("turn_id")
+  end
+
+  test "prepare computes without durable proposal writes and persist commits the plan" do
+    service, = build_service
+
+    prepared = service.prepare
+
+    assert_equal "fake", prepared.fetch("mode")
+    assert_equal 1, prepared.fetch("proposed").size
+    assert_empty @proposal_store.list(world_id: @world.fetch("id"))
+
+    result = service.persist(prepared: prepared)
+
+    assert_equal 1, result.fetch("proposals").size
+    assert_equal 1, @proposal_store.list(world_id: @world.fetch("id")).size
+  end
+
+  private
+
+  def build_service
     update = {
       "contract_version" => "0.1",
       "operation" => "assert",
@@ -60,7 +88,7 @@ class WorldStateProposeUpdatesTest < ActiveSupport::TestCase
     message_id = SecureRandom.uuid
     turn_id = SecureRandom.uuid
 
-    result = WorldState::ProposeUpdates.new(
+    service = WorldState::ProposeUpdates.new(
       world_id: @world.fetch("id"),
       situation: { "facts" => [{ "text" => "The cables are in the blue box." }] },
       proposer: proposer,
@@ -69,11 +97,8 @@ class WorldStateProposeUpdatesTest < ActiveSupport::TestCase
       conversation_id: conversation_id,
       message_id: message_id,
       turn_id: turn_id
-    ).call
+    )
 
-    proposal = result.fetch("proposals").sole
-    assert_equal conversation_id, proposal.fetch("conversation_id")
-    assert_equal message_id, proposal.fetch("message_id")
-    assert_equal turn_id, proposal.fetch("turn_id")
+    [service, conversation_id, message_id, turn_id]
   end
 end

@@ -5,7 +5,7 @@ Conversation Turn State makes each user turn a durable workflow object instead o
 ## States
 
 - `processing` - turn has been created and work is in progress
-- `awaiting_clarification` - identity ambiguity blocks safe continuation
+- `awaiting_clarification` - identity ambiguity blocks safe continuation or a resolved clarification is awaiting proposal finalization
 - `ready_for_review` - one or more state update proposals are ready for explicit review
 - `completed` - the turn finished without pending clarification or proposal review work
 - `failed` - processing raised an error after turn creation
@@ -75,7 +75,7 @@ awaiting_clarification
   -> answer clarification A
   -> clarification B still pending? yes -> awaiting_clarification
   -> answer clarification B
-  -> all clarifications resolved? yes -> propose updates once
+  -> all clarifications resolved? yes -> prepare proposals
   -> proposals? yes -> ready_for_review
   -> proposals? no  -> completed
 ```
@@ -88,11 +88,11 @@ The resume response includes `pending_clarification_ids` for turn-backed clarifi
 
 Legacy clarification records without a `turn_id` keep the pre-turn resume behavior for compatibility.
 
-### Atomic turn-backed resume
+### Two-phase turn-backed finalization
 
-With the default ActiveRecord/PostgreSQL adapter, a turn-backed clarification resume runs inside one `Persistence.transaction`. The conversation turn row is locked first and acts as the serialization point for every clarification answer linked to that turn.
+With the default ActiveRecord/PostgreSQL adapter, turn-backed clarification resume uses the conversation turn row as the serialization point for sibling answers, but it does not hold that row lock across proposal computation.
 
-The transaction covers:
+Phase one is a short transaction:
 
 ```text
 lock conversation turn
@@ -100,16 +100,35 @@ lock conversation turn
   -> answer clarification
   -> read sibling clarification states
   -> enforce the clarification barrier
-  -> generate/persist proposals when the barrier closes
-  -> transition the same turn
   -> commit
 ```
 
-This prevents two concurrent sibling answers from both observing the other sibling as still pending and committing a permanently stuck `awaiting_clarification` turn. It also gives failure atomicity: if final resume work raises before commit, the clarification answer, proposal persistence, and turn transition roll back together.
+This prevents concurrent sibling answers from both observing each other as pending. Once the barrier closes, proposal computation runs outside the transaction:
 
-The legacy JSON-directory adapter still serializes writes only through its individual file locks. `Persistence.transaction` is a no-op there, so it does not provide cross-file rollback atomicity.
+```text
+resolved Situation + World snapshot
+  -> State Update Proposer
+  -> prepared proposal plan
+```
 
-The RubyLLM state update proposer remains opt-in. If enabled, proposal generation currently occurs inside this correctness transaction. That keeps durable resume state atomic but can hold the turn lock across provider latency. Before enabling model-backed proposal generation at production scale, proposal computation should be split from the short durable commit phase with an explicit recoverable finalization state.
+`WorldState::ProposeUpdates#prepare` performs this computation without durable proposal writes. If `AI_STATE_UPDATE_PROPOSER=ruby_llm` is explicitly enabled, provider latency happens here without holding the turn row lock.
+
+Phase two is another short transaction:
+
+```text
+lock conversation turn
+  -> verify turn is still awaiting finalization
+  -> persist prepared proposals
+  -> record proposal_ids
+  -> ready_for_review | completed
+  -> commit
+```
+
+`WorldState::ProposeUpdates#persist` only writes a previously prepared plan. A concurrent duplicate finalizer rechecks the turn under lock; once another request has moved it to `ready_for_review` or `completed`, the duplicate does not persist a second proposal set.
+
+There is an intentional recovery boundary between the two phases. If proposal computation fails after the clarification answer commits, the clarification remains resolved and the turn remains `awaiting_clarification` with no `proposal_ids`. Retrying the same clarification answer is idempotent and resumes proposal computation. Retrying with a different option or action fails closed instead of rewriting the persisted identity decision.
+
+The legacy JSON-directory adapter keeps its compatibility behavior. `Persistence.transaction` is a no-op there, so cross-file atomicity and PostgreSQL row-lock serialization guarantees do not apply.
 
 ## Proposal review completion
 
@@ -146,4 +165,4 @@ Proposal review does not infer completion from UI behavior. Only persisted termi
 
 ## Cost
 
-Turn state and clarification barrier handling are deterministic and model-free. They add no model calls. The separate State Update Proposer remains disabled by default and is not enabled by this lifecycle work.
+Clarification barrier and persistence phases are deterministic and model-free. The State Update Proposer remains disabled by default. This change does not enable RubyLLM or any paid model/provider call; it only makes the opt-in model path safe from holding a database row lock during provider latency.
