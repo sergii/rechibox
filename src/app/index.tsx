@@ -192,7 +192,6 @@ export default function HomeScreen() {
           <View style={styles.composerRow}>
             <TextInput
               accessibilityLabel="Запит до Rechibox"
-              blurOnSubmit={false}
               editable={!isSending}
               multiline
               onChangeText={setDraft}
@@ -204,6 +203,7 @@ export default function HomeScreen() {
                 styles.input,
                 { borderColor: colors.border, color: colors.text, backgroundColor: colors.card },
               ]}
+              submitBehavior="submit"
               value={draft}
             />
             <Pressable
