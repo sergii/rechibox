@@ -1,0 +1,15 @@
+context platform=ios timeout=45000 retries=1
+
+react-native dismiss-overlay
+wait "label=\"Відкрити інвентар\"" 15000
+screenshot "${AD_ARTIFACTS}/home.png"
+click "label=\"Відкрити інвентар\""
+wait "Мій інвентар" 10000
+screenshot "${AD_ARTIFACTS}/inventory.png"
+back
+wait "label=\"Відкрити варіанти зберігання\"" 10000
+click "label=\"Відкрити варіанти зберігання\""
+wait "Оберіть свій варіант" 10000
+screenshot "${AD_ARTIFACTS}/storage.png"
+back
+wait "label=\"Відкрити інвентар\"" 10000
