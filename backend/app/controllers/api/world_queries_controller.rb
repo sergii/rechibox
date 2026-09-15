@@ -79,7 +79,7 @@ module Api
       render json: WorldState::ResumeNaturalQuery.new(
         world_id: params.require(:id),
         clarification_id: params.require(:clarification_id),
-        action: params.require(:action),
+        action: params.require(:clarification_action),
         option_id: params[:option_id]
       ).call
     rescue ActionController::ParameterMissing, ArgumentError => e
