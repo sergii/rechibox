@@ -68,7 +68,25 @@ Message replies also return the current `turn` object and use the persisted turn
 
 ## Clarification resume
 
-Clarification resume context carries the originating `turn_id`. When the user resolves a clarification, the same turn advances to `ready_for_review` or `completed` instead of creating a second interpretation turn.
+Clarification resume context carries the originating `turn_id`. A turn may contain more than one identity clarification. The full `clarification_ids` set is a barrier: answering one clarification does not resume proposal generation while any sibling clarification remains pending.
+
+```text
+awaiting_clarification
+  -> answer clarification A
+  -> clarification B still pending? yes -> awaiting_clarification
+  -> answer clarification B
+  -> all clarifications resolved? yes -> propose updates once
+  -> proposals? yes -> ready_for_review
+  -> proposals? no  -> completed
+```
+
+When the final clarification is answered, `Conversations::ResumeClarification` reconstructs one entity-resolution set from every selected clarification before calling the state update proposer. This prevents the last answer from discarding selections made for earlier ambiguous entities.
+
+`resolved` and `none_of_above` are terminal clarification states. If any clarification closes as `none_of_above`, the turn still waits for its pending siblings, but proposal generation remains blocked after the barrier closes because the original entity set is not fully resolved. The turn then completes without inferred state updates.
+
+The resume response includes `pending_clarification_ids` for turn-backed clarifications so clients can render the remaining work without deriving it from the transcript.
+
+Legacy clarification records without a `turn_id` keep the pre-turn resume behavior for compatibility.
 
 ## Proposal review completion
 
@@ -99,8 +117,10 @@ With the default ActiveRecord adapter, World State mutation, proposal lifecycle 
 
 Turn state is orchestration metadata. It does not grant the AI permission to mutate World State. Durable physical-world changes still require the existing State Update Proposal, review, validation, and apply boundaries.
 
+Clarification answers are deterministic identity selections. They do not mutate World State or grant the proposer permission to infer missing identity decisions.
+
 Proposal review does not infer completion from UI behavior. Only persisted terminal proposal states can close a `ready_for_review` turn.
 
 ## Cost
 
-Turn state is deterministic and model-free. It adds no model calls.
+Turn state and clarification barrier handling are deterministic and model-free. They add no model calls.
