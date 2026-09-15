@@ -11,9 +11,8 @@ user message
   -> query interpreter
   -> bounded intent + entity mention
   -> deterministic entity resolution
-  -> stop if ambiguous or unresolved
-  -> WorldState::Query
-  -> deterministic result
+  -> resolved: WorldState::Query -> deterministic answer
+  -> ambiguous: durable clarification -> explicit user selection -> resume same query
 ```
 
 Supported intents are inherited from World Query v0.1:
@@ -26,7 +25,9 @@ who_owns
 who_has_custody
 ```
 
-## Endpoint
+## Endpoints
+
+Start a query:
 
 ```text
 POST /api/worlds/:id/natural_query
@@ -39,6 +40,31 @@ Request:
   "message": "Де мої кабелі?"
 }
 ```
+
+When entity resolution is ambiguous, the response includes a durable pending `clarification` with up to three resolver candidates. The query is not executed.
+
+Resume after an explicit selection:
+
+```text
+POST /api/worlds/:id/natural_query/clarifications/:clarification_id/answer
+```
+
+```json
+{
+  "action": "select",
+  "option_id": "1"
+}
+```
+
+Or close the ambiguity without guessing:
+
+```json
+{
+  "action": "none_of_above"
+}
+```
+
+The resume context stores the original bounded query, message, and optional depth. A selected option is revalidated by the existing `AnswerClarification` service before its durable entity ID is used. The interpreter is not called again.
 
 ## Default mode
 
@@ -91,9 +117,7 @@ An interpreter produces the same bounded shape:
 
 The entity ref is request-local. It is never accepted as a durable World State entity ID.
 
-Rails passes the mention through `WorldState::ResolveEntities`. Only a `resolved` result is allowed to execute `WorldState::Query`.
-
-For `ambiguous` or `unresolved`, `query_result` remains null. No interpreter can pick a candidate by itself.
+Rails passes the mention through `WorldState::ResolveEntities`. Only a `resolved` result, either direct or explicitly selected through a clarification, is allowed to execute `WorldState::Query`.
 
 ## Safety boundary
 
@@ -107,8 +131,6 @@ The interpreter cannot:
 - choose among ambiguous entity candidates
 - infer missing ownership, custody, location, containment, or disposition facts
 
+The clarification path cannot merge identities or mutate World State claims. It only records the user's selection for this query and resumes the deterministic read.
+
 The deterministic query layer remains the source of execution semantics.
-
-## Next integration
-
-A later conversation integration can translate ambiguous resolution into the existing clarification lifecycle rather than returning raw candidates. That should reuse the durable clarification/turn machinery instead of adding a second ambiguity workflow.
