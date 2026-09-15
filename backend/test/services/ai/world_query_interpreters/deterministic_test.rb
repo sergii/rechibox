@@ -10,7 +10,7 @@ class AiWorldQueryInterpretersDeterministicTest < ActiveSupport::TestCase
     assert_equal "other", result.dig("query", "entity", "kind")
   end
 
-  test "parses direct contents question" do
+  test "parses direct Ukrainian contents question" do
     result = interpreter.call(message: "Що в синій коробці?")
 
     assert_equal "what_is_in", result.dig("query", "intent")
@@ -23,6 +23,20 @@ class AiWorldQueryInterpretersDeterministicTest < ActiveSupport::TestCase
 
     assert_equal "who_has_custody", custody.dig("query", "intent")
     assert_equal "who_owns", ownership.dig("query", "intent")
+  end
+
+  test "parses English bounded query" do
+    result = interpreter.call(message: "Where are my cables?")
+
+    assert_equal "where_is", result.dig("query", "intent")
+    assert_equal "cables", result.dig("query", "entity", "label")
+  end
+
+  test "Russian wording is outside the deterministic language contract" do
+    result = interpreter.call(message: "Где мои кабели?")
+
+    assert_nil result["query"]
+    assert_equal "unsupported", result["reason"]
   end
 
   test "unsupported wording fails closed without inventing a query" do
