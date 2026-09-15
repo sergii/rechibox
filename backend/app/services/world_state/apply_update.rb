@@ -72,21 +72,26 @@ module WorldState
     end
 
     def validate_subject!(world)
-      return if entity_exists?(world, @update.fetch("subject_id"))
-
-      raise ArgumentError, "subject entity not found"
+      entity = entity_for(world, @update.fetch("subject_id"))
+      raise ArgumentError, "subject entity not found" unless entity
+      raise ArgumentError, "subject entity is merged; use canonical entity id" if merged_entity?(entity)
     end
 
     def validate_object!(world)
       object = normalized_object
       return unless object["type"] == "entity"
-      return if entity_exists?(world, object.fetch("id"))
 
-      raise ArgumentError, "object entity not found"
+      entity = entity_for(world, object.fetch("id"))
+      raise ArgumentError, "object entity not found" unless entity
+      raise ArgumentError, "object entity is merged; use canonical entity id" if merged_entity?(entity)
     end
 
-    def entity_exists?(world, id)
-      world.fetch("entities").any? { |entity| entity.fetch("id") == id }
+    def entity_for(world, id)
+      world.fetch("entities").find { |entity| entity.fetch("id") == id }
+    end
+
+    def merged_entity?(entity)
+      entity["status"] == "merged" || entity["merged_into_entity_id"].to_s != ""
     end
 
     def normalized_object
