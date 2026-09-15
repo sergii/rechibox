@@ -75,6 +75,19 @@ module Api
       render json: { error: e.message }, status: :not_found
     end
 
+    def answer_natural_query_clarification
+      render json: WorldState::ResumeNaturalQuery.new(
+        world_id: params.require(:id),
+        clarification_id: params.require(:clarification_id),
+        action: params.require(:clarification_action),
+        option_id: params[:option_id]
+      ).call
+    rescue ActionController::ParameterMissing, ArgumentError => e
+      render json: { error: e.message }, status: :unprocessable_entity
+    rescue KeyError => e
+      render json: { error: e.message }, status: :not_found
+    end
+
     private
 
     def entity_filters
