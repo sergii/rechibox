@@ -7,8 +7,8 @@ module WorldState
       ProposalStores::JsonDirectory.new
     end
 
-    def create(world_id:, proposal:, proposer_mode:)
-      raise NotImplementedError, "#{self.class.name} must implement #create(world_id:, proposal:, proposer_mode:)"
+    def create(world_id:, proposal:, proposer_mode:, context: nil)
+      raise NotImplementedError, "#{self.class.name} must implement #create(world_id:, proposal:, proposer_mode:, context:)"
     end
 
     def fetch(world_id:, id:)
