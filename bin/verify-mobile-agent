@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+EXPO_AGENT_VERSION="${RECHIBOX_EXPO_AGENT_VERSION:-1.0.13}"
+AGENT_DEVICE_VERSION="${RECHIBOX_AGENT_DEVICE_VERSION:-0.21.1}"
+FLOW="$ROOT/tests/mobile/replays/home-navigation.ios.ad"
+ARTIFACTS_DIR="${RECHIBOX_AGENT_ARTIFACTS_DIR:-$ROOT/.git/rechibox-agent-artifacts/ios}"
+
+echo "== Rechibox mobile verification =="
+echo "Target: local iOS Simulator. No EAS or cloud macOS runner is requested."
+echo
+
+echo "1/4 Typecheck"
+npm run typecheck
+
+echo
+echo "2/4 Lint"
+npm run lint
+
+echo
+echo "3/4 Expo runtime smoke"
+npx --yes "@expo/agent-cli@$EXPO_AGENT_VERSION" smoke --ios
+npx --yes "@expo/agent-cli@$EXPO_AGENT_VERSION" navigate /
+
+echo
+echo "4/4 Deterministic native replay"
+rm -rf "$ARTIFACTS_DIR"
+mkdir -p "$ARTIFACTS_DIR"
+npx --yes "agent-device@$AGENT_DEVICE_VERSION" test "$FLOW" \
+  --artifacts-dir "$ARTIFACTS_DIR" \
+  --reporter default
+
+echo
+echo "PASS: Rechibox mobile verification completed."
+echo "Artifacts: $ARTIFACTS_DIR"
