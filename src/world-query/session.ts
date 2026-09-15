@@ -1,4 +1,4 @@
-import Storage from 'expo-sqlite/kv-store';
+import Storage from './storage';
 
 import { getWorldQueryConfiguration, WorldQueryClientError } from './client';
 
