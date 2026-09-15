@@ -28,29 +28,43 @@ module Conversations
       conversation = @store.fetch(@conversation_id)
       world_id = conversation.fetch("world_id")
       clarification = @clarification_store.fetch(world_id: world_id, id: @clarification_id)
-      context = clarification.fetch("resume_context") do
-        raise ArgumentError, "clarification cannot resume a conversation"
-      end
-      raise ArgumentError, "clarification belongs to another conversation" unless context.fetch("conversation_id") == @conversation_id
+      context = resume_context!(clarification)
 
-      answered = WorldState::AnswerClarification.new(
-        world_id: world_id,
-        clarification_id: @clarification_id,
-        action: @action,
-        option_id: @option_id,
-        store: @clarification_store,
-        world_store: @world_store
-      ).call
+      return resume_legacy_clarification(conversation: conversation, world_id: world_id, context: context) unless context["turn_id"]
 
-      return resume_legacy(conversation: conversation, world_id: world_id, context: context, answered: answered) unless context["turn_id"]
-
-      resume_turn(conversation: conversation, world_id: world_id, context: context, answered: answered)
+      resume_transactional_turn(conversation: conversation, world_id: world_id, turn_id: context.fetch("turn_id"))
     end
 
     private
 
-    def resume_turn(conversation:, world_id:, context:, answered:)
-      turn = @turn_store.fetch(conversation_id: @conversation_id, id: context.fetch("turn_id"))
+    def resume_transactional_turn(conversation:, world_id:, turn_id:)
+      result = nil
+
+      Persistence.transaction do
+        # The turn row is the serialization point for every clarification answer
+        # that belongs to this turn. ActiveRecord keeps this row lock until the
+        # outer transaction commits, so sibling answers cannot both observe each
+        # other as pending and leave the turn stuck behind the barrier.
+        @turn_store.update(conversation_id: @conversation_id, id: turn_id) do |turn|
+          clarification = @clarification_store.fetch(world_id: world_id, id: @clarification_id)
+          context = resume_context!(clarification)
+          raise ArgumentError, "clarification belongs to another conversation turn" unless context.fetch("turn_id") == turn.fetch("id")
+
+          answered = answer_clarification(world_id: world_id)
+          result = resume_locked_turn(
+            conversation: conversation,
+            world_id: world_id,
+            context: context,
+            answered: answered,
+            turn: turn
+          )
+        end
+      end
+
+      result
+    end
+
+    def resume_locked_turn(conversation:, world_id:, context:, answered:, turn:)
       clarification_ids = Array(turn["clarification_ids"])
       raise ArgumentError, "clarification is not linked to conversation turn" unless clarification_ids.include?(@clarification_id)
 
@@ -60,8 +74,8 @@ module Conversations
       pending = clarifications.reject { |row| TERMINAL_CLARIFICATION_STATUSES.include?(row.fetch("status")) }
 
       if pending.any?
-        turn = update_turn(
-          turn_id: turn.fetch("id"),
+        apply_turn_update!(
+          turn: turn,
           status: "awaiting_clarification",
           clarification: answered,
           proposals: nil
@@ -75,8 +89,8 @@ module Conversations
       end
 
       if clarifications.any? { |row| row.fetch("status") == "none_of_above" }
-        turn = update_turn(
-          turn_id: turn.fetch("id"),
+        apply_turn_update!(
+          turn: turn,
           status: "completed",
           clarification: answered,
           proposals: []
@@ -109,8 +123,8 @@ module Conversations
       ).call
       proposals = proposal_result.fetch("proposals")
       turn_status = proposals.any? ? "ready_for_review" : "completed"
-      turn = update_turn(
-        turn_id: turn.fetch("id"),
+      apply_turn_update!(
+        turn: turn,
         status: turn_status,
         clarification: answered,
         proposals: proposals
@@ -141,13 +155,32 @@ module Conversations
       }
     end
 
-    def update_turn(turn_id:, status:, clarification:, proposals:)
-      @turn_store.update(conversation_id: @conversation_id, id: turn_id) do |record|
-        TurnState.transition!(record, to: status)
-        record["resolved_clarification_ids"] ||= []
-        record["resolved_clarification_ids"] << clarification.fetch("id") unless record["resolved_clarification_ids"].include?(clarification.fetch("id"))
-        record["proposal_ids"] = proposals.map { |row| row.fetch("id") } unless proposals.nil?
+    def apply_turn_update!(turn:, status:, clarification:, proposals:)
+      TurnState.transition!(turn, to: status)
+      turn["resolved_clarification_ids"] ||= []
+      turn["resolved_clarification_ids"] << clarification.fetch("id") unless turn["resolved_clarification_ids"].include?(clarification.fetch("id"))
+      turn["proposal_ids"] = proposals.map { |row| row.fetch("id") } unless proposals.nil?
+      turn
+    end
+
+    def resume_context!(clarification)
+      context = clarification.fetch("resume_context") do
+        raise ArgumentError, "clarification cannot resume a conversation"
       end
+      raise ArgumentError, "clarification belongs to another conversation" unless context.fetch("conversation_id") == @conversation_id
+
+      context
+    end
+
+    def answer_clarification(world_id:)
+      WorldState::AnswerClarification.new(
+        world_id: world_id,
+        clarification_id: @clarification_id,
+        action: @action,
+        option_id: @option_id,
+        store: @clarification_store,
+        world_store: @world_store
+      ).call
     end
 
     def resolved_resolution_set(original:, clarifications:)
@@ -170,6 +203,16 @@ module Conversations
       end
 
       original.merge("resolutions" => rows)
+    end
+
+    def resume_legacy_clarification(conversation:, world_id:, context:)
+      answered = answer_clarification(world_id: world_id)
+      resume_legacy(
+        conversation: conversation,
+        world_id: world_id,
+        context: context,
+        answered: answered
+      )
     end
 
     def resume_legacy(conversation:, world_id:, context:, answered:)
