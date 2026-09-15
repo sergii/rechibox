@@ -26,6 +26,43 @@ The tools are complementary:
 
 Do not add Appium, autonomous GUI-agent frameworks, or another mobile automation stack unless this smaller harness demonstrates a concrete gap.
 
+## One-command local gate
+
+For ordinary local iOS verification, run one command:
+
+```sh
+npm run verify:mobile
+```
+
+It performs the current useful verification chain in one process:
+
+1. strict TypeScript;
+2. lint;
+3. `@expo/agent-cli` local iOS smoke verification and navigation to `/`;
+4. the deterministic `agent-device` replay at `tests/mobile/replays/home-navigation.ios.ad`.
+
+The first replay deliberately stays small and mutation-free:
+
+```text
+home
+  -> inventory list
+  -> home
+  -> storage options
+  -> home
+```
+
+It verifies stable accessibility boundaries already owned by the product and captures screenshots of the home, inventory, and storage screens. It does not require the World Query backend, mutate SQLite data, request camera permission, or invoke EAS.
+
+Artifacts are written under:
+
+```text
+.git/rechibox-agent-artifacts/ios
+```
+
+Keeping generated evidence below `.git` prevents verification runs from dirtying the working tree.
+
+`verify:mobile` is intentionally local-only. It never opts into EAS or the billed `native-sim` cloud path. If Xcode/iOS Simulator is unavailable, it should fail rather than silently spend cloud credits.
+
 ## `@expo/agent-cli`
 
 The CLI is experimental, so Rechibox pins the command version in package scripts instead of depending on a moving `latest` release.
@@ -39,7 +76,7 @@ npm run agent:smoke:android
 
 The scripts currently use `@expo/agent-cli@1.0.13` through `npx`. This does not add a runtime or project dependency.
 
-Useful direct commands while working interactively include:
+Useful direct commands while debugging the harness include:
 
 ```sh
 npx --yes @expo/agent-cli@1.0.13 dev --ios --detach
@@ -49,7 +86,7 @@ npx --yes @expo/agent-cli@1.0.13 runtime:errors
 npx --yes @expo/agent-cli@1.0.13 runtime:tree
 ```
 
-Prefer the project scripts for stable entry points and direct commands for exploratory work.
+Prefer `npm run verify:mobile` for the normal gate. Use the lower-level commands when diagnosing a failure or exploring a new flow.
 
 References:
 
@@ -60,33 +97,19 @@ References:
 
 `agent-device` is developer-host / verification infrastructure, not a Rechibox application dependency. Expo documents it as an external verification tool for an installed Expo app.
 
-The repository already uses `agent-device` in `bin/cloud-ios-smoke`; the current pinned default there is `0.21.1`.
+The repository already uses `agent-device` in `bin/cloud-ios-smoke`; the current pinned default there is `0.21.1`. The one-command local gate uses the same version.
 
-For local verification, install/check the matching version on a development machine when needed:
-
-```sh
-npm install -g agent-device@0.21.1
-agent-device doctor
-agent-device help workflow
-```
-
-A typical local verification loop is:
+For manual debugging, useful commands include:
 
 ```sh
-# Start the app first, for example:
-npm run ios
-
-# In another terminal:
-agent-device open com.sergii.rechibox --platform ios
-agent-device snapshot -i
-# interact with semantic refs returned by the snapshot
-agent-device screenshot ./tmp/rechibox-verification.png
-agent-device close
+npx --yes agent-device@0.21.1 doctor
+npx --yes agent-device@0.21.1 help workflow
+npx --yes agent-device@0.21.1 snapshot -i
 ```
 
 Use semantic/accessibility inspection as the primary control surface. Use screenshots, recordings, logs, network traces, and performance data as evidence or when semantic data is insufficient.
 
-When an exploratory flow becomes valuable and stable, save it as an `agent-device` replay instead of immediately introducing a separate E2E framework.
+When an exploratory flow becomes valuable and stable, save it as an `agent-device` replay instead of immediately introducing a separate E2E framework. Durable replays should target stable labels/IDs rather than transient interactive refs.
 
 References:
 
@@ -110,35 +133,33 @@ That command:
 5. opens `com.sergii.rechibox` and captures an interactive accessibility snapshot;
 6. tears the remote run down immediately after verification by default.
 
-`cloud:ios` consumes billed/limited macOS runner time. Do not use it for documentation-only, non-native, or otherwise cheap-to-check changes. Prefer local verification when a suitable simulator/device is available. Use the cloud path when remote native iOS verification is materially useful.
+`cloud:ios` consumes billed/limited macOS runner time. Do not use it for documentation-only, non-native, or otherwise cheap-to-check changes. Prefer `npm run verify:mobile` when local iOS is available. Use the cloud path only when remote native iOS verification is materially useful.
 
 ## Verification policy
 
-For meaningful UI or interaction changes, prefer this order:
+For an ordinary meaningful UI/interaction change, the default command is:
 
-1. `npm run typecheck` and `npm run lint`.
-2. `npm run agent:status` to inspect the Expo project/runtime plan.
-3. Run the relevant iOS or Android target locally when practical.
-4. Use `agent-device` to inspect the real screen, drive the changed flow, and capture evidence when the tool is available on the host.
-5. Run the relevant `agent:smoke:*` command.
-6. Use `npm run cloud:ios` only when remote native iOS verification is worth the runner cost.
-7. For camera-critical behavior, still verify on a physical device. Simulator success is not sufficient evidence for camera behavior.
+```sh
+npm run verify:mobile
+```
 
-A screenshot alone is not a complete verification result when the change is interactive. Prefer evidence that shows both reachable state and behavior.
+Use lower-level `agent:*` and `agent-device` commands only when the combined gate fails or when authoring a new replay. Use `npm run cloud:ios` explicitly when remote native iOS verification is worth the runner cost.
 
-## First bounded trial
+Camera-critical behavior still requires a physical device. Simulator success is not sufficient evidence for camera behavior. A screenshot alone is not a complete verification result when the change is interactive; the deterministic replay verifies reachable behavior as well as visual evidence.
 
-Use the combined harness on the next user-visible Rechibox slice and answer these questions before expanding it:
+## Trial criteria
+
+Use the combined harness on real Rechibox changes and keep track of these questions before expanding it:
 
 - Can the coding agent reach the changed screen without manual help?
-- Is the accessibility snapshot sufficient to identify the important controls?
-- Can it complete the primary flow and one failure/recovery flow?
+- Are accessibility selectors stable enough for durable replays?
+- Can it complete the primary flow and one useful recovery flow?
 - Does the captured evidence make review easier?
-- Can a useful exploratory flow be replayed without an LLM?
-- Does `@expo/agent-cli` add useful project/runtime diagnostics beyond the existing device layer?
+- Do deterministic replays remain reliable without an LLM?
+- Does `@expo/agent-cli` add useful project/runtime diagnostics beyond the device layer?
 - What is the setup/runtime cost on iOS and Android?
 
-If this works, keep the harness small and make successful replay flows part of the repository over time. If it does not, evaluate a deeper tool before adding more framework layers.
+If this works, keep the harness small and add replay coverage only for product flows that earn their maintenance cost. If it does not, evaluate a deeper tool before adding more framework layers.
 
 ## Deferred alternatives
 
