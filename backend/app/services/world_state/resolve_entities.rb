@@ -119,7 +119,15 @@ module WorldState
     end
 
     def tokens(value)
-      value.split.reject { |token| STOPWORDS.include?(token) }
+      value.split.reject { |token| STOPWORDS.include?(token) }.map { |token| token_key(token) }
+    end
+
+    def token_key(token)
+      return token unless token.match?(/\p{Cyrillic}/u)
+      return token[0, 5] if token.length >= 6
+      return token[0, 3] if token.length >= 4
+
+      token
     end
   end
 end
