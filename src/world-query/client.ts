@@ -15,9 +15,29 @@ export type WorldQueryAnswer = {
   supporting_claim_ids: string[];
 };
 
+export type WorldQueryClarificationOption = {
+  option_id: string;
+  entity_id: string;
+  label: string;
+  kind: string;
+};
+
+export type WorldQueryClarification = {
+  id: string;
+  status: string;
+  question: string;
+  options: WorldQueryClarificationOption[];
+};
+
 export type NaturalWorldQueryResult = {
   mode: string;
   resolutionStatus: string | null;
+  clarification: WorldQueryClarification | null;
+  answer: WorldQueryAnswer | null;
+};
+
+export type WorldQueryClarificationResult = {
+  clarification: WorldQueryClarification;
   answer: WorldQueryAnswer | null;
 };
 
@@ -57,13 +77,7 @@ export async function askWorld(message: string, worldId: string): Promise<Natura
     throw new WorldQueryClientError('request_failed', 'World State id must not be blank.');
   }
 
-  const configuration = getWorldQueryConfiguration();
-  if (!configuration.ready) {
-    throw new WorldQueryClientError(
-      'not_configured',
-      'Rechibox World State backend is not configured for this build.',
-    );
-  }
+  const configuration = requireConfiguration();
 
   try {
     await syncInventoryToWorld(normalizedWorldId, configuration.apiUrl);
@@ -71,16 +85,61 @@ export async function askWorld(message: string, worldId: string): Promise<Natura
     throw new WorldQueryClientError('request_failed', 'Could not refresh your local inventory in Rechibox.');
   }
 
+  const payload = await postJson(
+    `${configuration.apiUrl}/api/worlds/${encodeURIComponent(normalizedWorldId)}/natural_query`,
+    { message: text },
+  );
+
+  return parseNaturalQueryResponse(payload);
+}
+
+export async function answerWorldClarification(
+  worldId: string,
+  clarificationId: string,
+  optionId: string | null,
+): Promise<WorldQueryClarificationResult> {
+  const normalizedWorldId = worldId.trim();
+  const normalizedClarificationId = clarificationId.trim();
+  if (!normalizedWorldId || !normalizedClarificationId) {
+    throw new WorldQueryClientError('request_failed', 'World State clarification is missing an id.');
+  }
+
+  const configuration = requireConfiguration();
+  const payload = await postJson(
+    `${configuration.apiUrl}/api/worlds/${encodeURIComponent(normalizedWorldId)}/natural_query/clarifications/${encodeURIComponent(normalizedClarificationId)}/answer`,
+    optionId ? { action: 'select', option_id: optionId } : { action: 'none_of_above' },
+  );
+
+  const clarification = parseClarification(payload.clarification);
+  if (!clarification) {
+    throw new WorldQueryClientError('invalid_response', 'Backend response is missing clarification.');
+  }
+
+  return {
+    clarification,
+    answer: parseAnswer(payload.answer),
+  };
+}
+
+function requireConfiguration() {
+  const configuration = getWorldQueryConfiguration();
+  if (!configuration.ready) {
+    throw new WorldQueryClientError(
+      'not_configured',
+      'Rechibox World State backend is not configured for this build.',
+    );
+  }
+  return configuration;
+}
+
+async function postJson(url: string, body: JsonObject): Promise<JsonObject> {
   let response: Response;
   try {
-    response = await fetch(
-      `${configuration.apiUrl}/api/worlds/${encodeURIComponent(normalizedWorldId)}/natural_query`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text }),
-      },
-    );
+    response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
   } catch {
     throw new WorldQueryClientError('request_failed', 'Could not reach the Rechibox backend.');
   }
@@ -90,8 +149,7 @@ export async function askWorld(message: string, worldId: string): Promise<Natura
     const detail = typeof payload.error === 'string' ? payload.error : `HTTP ${response.status}`;
     throw new WorldQueryClientError('request_failed', detail);
   }
-
-  return parseNaturalQueryResponse(payload);
+  return payload;
 }
 
 async function readJsonObject(response: Response): Promise<JsonObject> {
@@ -118,7 +176,49 @@ function parseNaturalQueryResponse(payload: JsonObject): NaturalWorldQueryResult
   return {
     mode,
     resolutionStatus,
+    clarification: parseClarification(payload.clarification),
     answer: parseAnswer(payload.answer),
+  };
+}
+
+function parseClarification(value: unknown): WorldQueryClarification | null {
+  if (value === null || value === undefined) return null;
+  if (!isObject(value)) {
+    throw new WorldQueryClientError('invalid_response', 'Backend clarification has an invalid shape.');
+  }
+
+  if (
+    typeof value.id !== 'string' ||
+    typeof value.status !== 'string' ||
+    typeof value.question !== 'string' ||
+    !Array.isArray(value.options)
+  ) {
+    throw new WorldQueryClientError('invalid_response', 'Backend clarification has an invalid shape.');
+  }
+
+  const options = value.options.map((option) => {
+    if (
+      !isObject(option) ||
+      typeof option.option_id !== 'string' ||
+      typeof option.entity_id !== 'string' ||
+      typeof option.label !== 'string' ||
+      typeof option.kind !== 'string'
+    ) {
+      throw new WorldQueryClientError('invalid_response', 'Backend clarification option has an invalid shape.');
+    }
+    return {
+      option_id: option.option_id,
+      entity_id: option.entity_id,
+      label: option.label,
+      kind: option.kind,
+    };
+  });
+
+  return {
+    id: value.id,
+    status: value.status,
+    question: value.question,
+    options,
   };
 }
 
