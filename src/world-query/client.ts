@@ -29,11 +29,30 @@ export type WorldQueryClarification = {
   options: WorldQueryClarificationOption[];
 };
 
+export type WorldMutationProposal = {
+  id: string;
+  status: string;
+  update: {
+    operation: string;
+    predicate: string;
+    subject_id: string;
+    object: { entity_id?: string; value?: unknown };
+  };
+};
+
+export type NaturalLocationCommandResult = {
+  status: 'unsupported' | 'unresolved' | 'ambiguous' | 'already_current' | 'ready_for_review';
+  subjectLabel: string | null;
+  locationLabel: string | null;
+  proposal: WorldMutationProposal | null;
+};
+
 export type NaturalWorldQueryResult = {
   mode: string;
   resolutionStatus: string | null;
   clarification: WorldQueryClarification | null;
   answer: WorldQueryAnswer | null;
+  command: NaturalLocationCommandResult | null;
 };
 
 export type WorldQueryClarificationResult = {
@@ -89,8 +108,32 @@ export async function askWorld(message: string, worldId: string): Promise<Natura
     `${configuration.apiUrl}/api/worlds/${encodeURIComponent(normalizedWorldId)}/natural_query`,
     { message: text },
   );
+  const queryResult = parseNaturalQueryResponse(payload);
 
-  return parseNaturalQueryResponse(payload);
+  if (queryResult.answer || queryResult.clarification || queryResult.mode === 'disabled') {
+    return queryResult;
+  }
+
+  const commandPayload = await postJson(
+    `${configuration.apiUrl}/api/worlds/${encodeURIComponent(normalizedWorldId)}/natural_location_command`,
+    { message: text },
+  );
+
+  return { ...queryResult, command: parseNaturalLocationCommand(commandPayload) };
+}
+
+export async function acceptWorldProposal(
+  worldId: string,
+  proposalId: string,
+): Promise<WorldMutationProposal> {
+  return reviewWorldProposal(worldId, proposalId, 'accept');
+}
+
+export async function rejectWorldProposal(
+  worldId: string,
+  proposalId: string,
+): Promise<WorldMutationProposal> {
+  return reviewWorldProposal(worldId, proposalId, 'reject');
 }
 
 export async function answerWorldClarification(
@@ -121,6 +164,25 @@ export async function answerWorldClarification(
     clarification,
     answer: parseAnswer(payload.answer),
   };
+}
+
+async function reviewWorldProposal(
+  worldId: string,
+  proposalId: string,
+  action: 'accept' | 'reject',
+): Promise<WorldMutationProposal> {
+  const normalizedWorldId = worldId.trim();
+  const normalizedProposalId = proposalId.trim();
+  if (!normalizedWorldId || !normalizedProposalId) {
+    throw new WorldQueryClientError('request_failed', 'World State proposal is missing an id.');
+  }
+
+  const configuration = requireConfiguration();
+  const payload = await postJson(
+    `${configuration.apiUrl}/api/worlds/${encodeURIComponent(normalizedWorldId)}/proposals/${encodeURIComponent(normalizedProposalId)}/${action}`,
+    {},
+  );
+  return parseProposal(payload.proposal);
 }
 
 function requireConfiguration() {
@@ -180,6 +242,52 @@ function parseNaturalQueryResponse(payload: JsonObject): NaturalWorldQueryResult
     resolutionStatus,
     clarification: parseClarification(payload.clarification),
     answer: parseAnswer(payload.answer),
+    command: null,
+  };
+}
+
+function parseNaturalLocationCommand(payload: JsonObject): NaturalLocationCommandResult {
+  const status = payload.status;
+  if (!isCommandStatus(status)) {
+    throw new WorldQueryClientError('invalid_response', 'Backend location command has an invalid status.');
+  }
+
+  const parsed = isObject(payload.parsed) ? payload.parsed : null;
+  return {
+    status,
+    subjectLabel: parsed && typeof parsed.subject_label === 'string' ? parsed.subject_label : null,
+    locationLabel: parsed && typeof parsed.location_label === 'string' ? parsed.location_label : null,
+    proposal: payload.proposal === undefined ? null : parseProposal(payload.proposal),
+  };
+}
+
+function parseProposal(value: unknown): WorldMutationProposal {
+  if (!isObject(value) || typeof value.id !== 'string' || typeof value.status !== 'string' || !isObject(value.update)) {
+    throw new WorldQueryClientError('invalid_response', 'Backend proposal has an invalid shape.');
+  }
+  const update = value.update;
+  if (
+    typeof update.operation !== 'string' ||
+    typeof update.predicate !== 'string' ||
+    typeof update.subject_id !== 'string' ||
+    !isObject(update.object)
+  ) {
+    throw new WorldQueryClientError('invalid_response', 'Backend proposal update has an invalid shape.');
+  }
+
+  const object: { entity_id?: string; value?: unknown } = {};
+  if (typeof update.object.entity_id === 'string') object.entity_id = update.object.entity_id;
+  if ('value' in update.object) object.value = update.object.value;
+
+  return {
+    id: value.id,
+    status: value.status,
+    update: {
+      operation: update.operation,
+      predicate: update.predicate,
+      subject_id: update.subject_id,
+      object,
+    },
   };
 }
 
@@ -263,6 +371,16 @@ function isAnswerStatus(value: unknown): value is WorldQueryAnswerStatus {
     value === 'unknown' ||
     value === 'conflict' ||
     value === 'unavailable'
+  );
+}
+
+function isCommandStatus(value: unknown): value is NaturalLocationCommandResult['status'] {
+  return (
+    value === 'unsupported' ||
+    value === 'unresolved' ||
+    value === 'ambiguous' ||
+    value === 'already_current' ||
+    value === 'ready_for_review'
   );
 }
 

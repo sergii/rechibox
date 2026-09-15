@@ -10,6 +10,7 @@ Rails.application.routes.draw do
       post "query", to: "world_queries#query", on: :member
       post "natural_query", to: "world_queries#natural_query", on: :member
       post "natural_query/clarifications/:clarification_id/answer", to: "world_queries#answer_natural_query_clarification", on: :member
+      post "natural_location_command", to: "world_queries#natural_location_command", on: :member
       post "inventory_snapshot", to: "world_inventory_snapshots#create", on: :member
       get "entities/:entity_id/physical_location", to: "world_queries#physical_location", on: :member
       post "resolve_entities", to: "worlds#resolve_entities", on: :member

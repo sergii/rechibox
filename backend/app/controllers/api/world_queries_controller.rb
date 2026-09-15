@@ -88,6 +88,16 @@ module Api
       render json: { error: e.message }, status: :not_found
     end
 
+    def natural_location_command
+      render json: WorldState::NaturalLocationCommand.new(
+        world_id: params.require(:id)
+      ).call(message: params.require(:message))
+    rescue ActionController::ParameterMissing, ArgumentError => e
+      render json: { error: e.message }, status: :unprocessable_entity
+    rescue KeyError => e
+      render json: { error: e.message }, status: :not_found
+    end
+
     private
 
     def entity_filters
