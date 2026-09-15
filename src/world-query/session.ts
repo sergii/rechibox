@@ -28,7 +28,7 @@ export async function bootstrapWorldSession(): Promise<WorldSession> {
   if (storedWorldId) {
     const exists = await worldExists(configuration.apiUrl, storedWorldId);
     if (exists) {
-      await syncInventoryToWorld(storedWorldId);
+      await syncInventoryToWorld(storedWorldId, configuration.apiUrl);
       return {
         apiUrl: configuration.apiUrl,
         worldId: storedWorldId,
@@ -41,7 +41,7 @@ export async function bootstrapWorldSession(): Promise<WorldSession> {
 
   const worldId = await createWorld(configuration.apiUrl);
   await Storage.setItem(storageKey, worldId);
-  await syncInventoryToWorld(worldId);
+  await syncInventoryToWorld(worldId, configuration.apiUrl);
 
   return {
     apiUrl: configuration.apiUrl,
