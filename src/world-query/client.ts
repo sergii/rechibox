@@ -107,7 +107,9 @@ export async function answerWorldClarification(
   const configuration = requireConfiguration();
   const payload = await postJson(
     `${configuration.apiUrl}/api/worlds/${encodeURIComponent(normalizedWorldId)}/natural_query/clarifications/${encodeURIComponent(normalizedClarificationId)}/answer`,
-    optionId ? { action: 'select', option_id: optionId } : { action: 'none_of_above' },
+    optionId
+      ? { clarification_action: 'select', option_id: optionId }
+      : { clarification_action: 'none_of_above' },
   );
 
   const clarification = parseClarification(payload.clarification);
