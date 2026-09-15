@@ -54,6 +54,7 @@
     "typecheck": "tsc --noEmit",
     "android": "expo start --android",
     "ios": "expo start --ios",
+    "verify:mobile": "bash ./bin/verify-mobile-agent",
     "cloud:ios": "bash ./bin/cloud-ios-smoke",
     "device": "bash ./bin/run-on-real-device",
     "device:check": "bash ./bin/run-on-real-device --check",
