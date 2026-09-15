@@ -22,11 +22,7 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false,
-      "permissions": [
-        "android.permission.CAMERA",
-        "android.permission.CAMERA"
-      ]
+      "predictiveBackGestureEnabled": false
     },
     "web": {
       "output": "static",
@@ -45,9 +41,9 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Дозвольте Rechibox використовувати камеру для створення інвентарю речей.",
+          "cameraPermission": "Дозвольте Rechibox використовувати камеру для створення інвентарю та сканування QR-кодів коробок.",
           "recordAudioAndroid": false,
-          "barcodeScannerEnabled": false
+          "barcodeScannerEnabled": true
         }
       ],
       [

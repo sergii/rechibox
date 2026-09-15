@@ -16,6 +16,8 @@ export default function RootLayout() {
         <Stack.Screen name="inventory" options={{ title: 'AI-інвентар' }} />
         <Stack.Screen name="inventory-list" options={{ title: 'Мій інвентар' }} />
         <Stack.Screen name="boxes" options={{ title: 'Мої коробки' }} />
+        <Stack.Screen name="boxes/[publicId]" options={{ title: 'Коробка' }} />
+        <Stack.Screen name="box-scan" options={{ title: 'Сканувати QR' }} />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>

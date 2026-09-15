@@ -1,3 +1,4 @@
+import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,6 +16,7 @@ import {
 
 export default function BoxesScreen() {
   const colors = useThemeColors();
+  const router = useRouter();
   const [boxes, setBoxes] = useState<StoredInventoryBox[]>([]);
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(true);
@@ -78,9 +80,13 @@ export default function BoxesScreen() {
             Мої коробки
           </Text>
           <Text variant="muted">
-            Створіть фізичну коробку, а потім додавайте до неї речі через AI-інвентар.
+            Кожна коробка має стабільний код і QR, який відкриває її вміст на цьому пристрої.
           </Text>
         </View>
+
+        <Button onPress={() => router.push('/box-scan')} size="lg" variant="outline">
+          Сканувати QR коробки
+        </Button>
 
         <Card className="gap-3 p-4">
           <Text variant="h4">Нова коробка</Text>
@@ -117,21 +123,28 @@ export default function BoxesScreen() {
           <Card className="gap-2 p-4">
             <Text variant="h4">Ще немає коробок</Text>
             <Text variant="muted">
-              Після створення коробка стане доступною як місце призначення під час збереження
-              розпізнаних речей.
+              Створіть коробку, щоб отримати її код і QR та прив’язувати до неї речі.
             </Text>
           </Card>
         ) : null}
 
         {!loading
           ? boxes.map((box) => (
-              <Card className="gap-1.5 p-4" key={box.id}>
+              <Card className="gap-2 p-4" key={box.publicId}>
                 <Text variant="h4">{box.name}</Text>
+                <Text variant="small">{box.code}</Text>
                 <Text variant="muted">
                   {box.itemCount === 0
                     ? 'Поки що порожня'
                     : `Речей у коробці: ${box.itemCount}`}
                 </Text>
+                <Button
+                  onPress={() =>
+                    router.push({ pathname: '/boxes/[publicId]', params: { publicId: box.publicId } })
+                  }
+                  variant="outline">
+                  Відкрити коробку
+                </Button>
               </Card>
             ))
           : null}
