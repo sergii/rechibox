@@ -31,4 +31,19 @@ physical box
 
 Benchmark or migrate to another scanning stack only after the real Box Identity flow demonstrates a problem. A synthetic throughput benchmark alone is not a reason to add native dependencies.
 
-Last reviewed: 2026-09-15.
+## Mobile agent and verification tooling
+
+| Technology | Ring | Decision | Revisit when |
+| --- | --- | --- | --- |
+| `@expo/agent-cli` | Trial | Use as the Expo-aware project/runtime layer for agent workflows. Rechibox pins `1.0.13` in package scripts instead of depending on a moving `latest` release because the tool is experimental. It is invoked through `npx`, not added as an application dependency. | Promote after several real feature slices show stable commands/output and useful failure diagnostics. |
+| `agent-device` | Trial | Use as the primary native device verification layer for coding agents: semantic accessibility snapshots, interaction, screenshots/logs/evidence, and replay. Keep it as developer-host tooling rather than a Rechibox runtime dependency. | Promote when it has verified representative iOS and Android flows and replay proves reliable enough for routine PR checks. |
+| Expo Device Hub | Adopt | Keep the existing local DevTools dashboard for human simulator/emulator control. It complements rather than replaces agent verification. | Revisit if it materially overlaps with the agent workflow or becomes maintenance-heavy. |
+| Argent | Assess | Strong candidate for deeper React Native/native debugging, profiling, network inspection, and visual regression. Do not add a second overlapping device tool before a demonstrated gap in the current harness. | Repeated performance/debugging problems require deeper runtime evidence than `agent-device` provides. |
+| Screenmap | Assess | Promising for PR-level screen/navigation maps and visual change review, but defer integration until the simpler `@expo/agent-cli` + `agent-device` verification loop is proven useful. | Rechibox has enough screens and PR churn that navigation/visual diffs would materially reduce review effort. |
+| Appium | Hold | Mature and appropriate for large deterministic QA suites and device farms, but too much framework for the current stage. | Dedicated QA automation, broad device-matrix coverage, or a long-lived enterprise E2E suite becomes a requirement. |
+| Mobile-Agent / AppAgent / Mobilerun-style autonomous GUI agents | Assess | Keep on the research radar for autonomous user-level exploration. Do not insert another planner/agent into the normal coding loop while the coding agent can drive the device directly. | A concrete autonomous exploratory-QA or cross-app task requires its own planning agent. |
+| Playwright | Hold for native | Use only for web surfaces if they become product-relevant. Browser mobile emulation does not verify the native iOS/Android app. | Rechibox gains a real web product/admin surface that needs browser automation. |
+
+The current harness is documented in [`docs/development/mobile-agent-harness.md`](development/mobile-agent-harness.md).
+
+Last reviewed: 2026-09-16.
