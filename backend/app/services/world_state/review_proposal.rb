@@ -35,7 +35,7 @@ module WorldState
       proposal = @proposal_store.fetch(world_id: @world_id, id: @proposal_id)
       raise ArgumentError, "proposal is not pending" unless proposal.fetch("status") == "pending"
 
-      result = @action == "accept" ? accept(proposal) : reject
+      result = @action == "accept" ? accept : reject
       turn = synchronize_turn(result.fetch("proposal"))
       return result unless turn
 
@@ -45,35 +45,30 @@ module WorldState
       )
     end
 
-    def accept(proposal)
-      world = @world_store.fetch(@world_id)
-      validation = ValidateUpdate.new(world: world, update: proposal.fetch("update")).call
+    def accept
+      updated_world = nil
+      reviewed = @proposal_store.update(world_id: @world_id, id: @proposal_id) do |record|
+        ensure_pending!(record)
+        world = @world_store.fetch(@world_id)
+        validation = ValidateUpdate.new(world: world, update: record.fetch("update")).call
 
-      unless validation.fetch("valid")
-        stale = @proposal_store.update(world_id: @world_id, id: @proposal_id) do |record|
-          ensure_pending!(record)
+        if validation.fetch("valid")
+          updated_world = ApplyUpdate.new(
+            world_id: @world_id,
+            update: record.fetch("update"),
+            store: @world_store
+          ).call
+          record["status"] = "accepted"
+        else
+          updated_world = world
           record["status"] = "stale"
-          record["validation"] = validation
-          record["resolved_at"] = Time.now.utc.iso8601(6)
         end
 
-        return { "proposal" => stale, "world_state" => world }
-      end
-
-      updated_world = ApplyUpdate.new(
-        world_id: @world_id,
-        update: proposal.fetch("update"),
-        store: @world_store
-      ).call
-
-      accepted = @proposal_store.update(world_id: @world_id, id: @proposal_id) do |record|
-        ensure_pending!(record)
-        record["status"] = "accepted"
         record["validation"] = validation
         record["resolved_at"] = Time.now.utc.iso8601(6)
       end
 
-      { "proposal" => accepted, "world_state" => updated_world }
+      { "proposal" => reviewed, "world_state" => updated_world }
     end
 
     def reject
