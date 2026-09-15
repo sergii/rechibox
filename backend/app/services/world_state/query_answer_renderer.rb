@@ -54,10 +54,10 @@ module WorldState
       locations = Array(path["entities"]).drop(1).map { |entity| entity["label"].to_s }.reject(&:empty?)
       return rendered("unknown", unknown_text("location", label, locale), claim_ids(edges)) if locations.empty?
 
-      text = case locale
-      when "uk" then "Розташування «#{label}»: #{locations.join(" → ")}."
-      when "ru" then "Расположение «#{label}»: #{locations.join(" → ")}."
-      else "Location of “#{label}”: #{locations.join(" → ")}."
+      text = if locale == "uk"
+        "Розташування «#{label}»: #{locations.join(" → ")}."
+      else
+        "Location of “#{label}”: #{locations.join(" → ")}."
       end
       rendered("resolved", text, claim_ids(edges))
     end
@@ -66,10 +66,10 @@ module WorldState
       labels = Array(entities).map { |entity| entity["label"].to_s }.reject(&:empty?)
       return rendered("unknown", unknown_text("contents", label, locale), []) if labels.empty?
 
-      text = case locale
-      when "uk" then "Вміст «#{label}»: #{labels.join(", ")}."
-      when "ru" then "Содержимое «#{label}»: #{labels.join(", ")}."
-      else "Contents of “#{label}”: #{labels.join(", ")}."
+      text = if locale == "uk"
+        "Вміст «#{label}»: #{labels.join(", ")}."
+      else
+        "Contents of “#{label}”: #{labels.join(", ")}."
       end
       rendered("resolved", text, claim_ids(edges))
     end
@@ -78,10 +78,10 @@ module WorldState
       labels = Array(result["entities"]).map { |entity| entity["label"].to_s }.reject(&:empty?)
       return rendered("unknown", unknown_text("ownership", label, locale), []) if labels.empty?
 
-      text = case locale
-      when "uk" then "Власник або власники «#{label}»: #{labels.join(", ")}."
-      when "ru" then "Владелец или владельцы «#{label}»: #{labels.join(", ")}."
-      else "Owner or owners of “#{label}”: #{labels.join(", ")}."
+      text = if locale == "uk"
+        "Власник або власники «#{label}»: #{labels.join(", ")}."
+      else
+        "Owner or owners of “#{label}”: #{labels.join(", ")}."
       end
       rendered("resolved", text, claim_ids(result["edges"]))
     end
@@ -90,18 +90,18 @@ module WorldState
       labels = Array(result["entities"]).map { |entity| entity["label"].to_s }.reject(&:empty?)
       return rendered("unknown", unknown_text("custody", label, locale), []) if labels.empty?
       if labels.size > 1
-        text = case locale
-        when "uk" then "Для «#{label}» є кілька активних записів про custody. Потрібне уточнення даних."
-        when "ru" then "Для «#{label}» есть несколько активных записей о custody. Нужно уточнить данные."
-        else "There are multiple active custody records for “#{label}”. The data needs clarification."
+        text = if locale == "uk"
+          "Для «#{label}» є кілька активних записів про зберігання. Потрібне уточнення даних."
+        else
+          "There are multiple active custody records for “#{label}”. The data needs clarification."
         end
         return rendered("conflict", text, claim_ids(result["edges"]))
       end
 
-      text = case locale
-      when "uk" then "Зараз «#{label}» зберігає: #{labels.first}."
-      when "ru" then "Сейчас «#{label}» хранит: #{labels.first}."
-      else "“#{label}” is currently held by: #{labels.first}."
+      text = if locale == "uk"
+        "Зараз «#{label}» зберігає: #{labels.first}."
+      else
+        "“#{label}” is currently held by: #{labels.first}."
       end
       rendered("resolved", text, claim_ids(result["edges"]))
     end
@@ -116,11 +116,7 @@ module WorldState
       when ["uk", "location"] then "Розташування «#{label}» поки не записане."
       when ["uk", "contents"] then "Для «#{label}» поки немає записаного вмісту."
       when ["uk", "ownership"] then "Власник «#{label}» поки не записаний."
-      when ["uk", "custody"] then "Custody для «#{label}» поки не записано."
-      when ["ru", "location"] then "Расположение «#{label}» пока не записано."
-      when ["ru", "contents"] then "Для «#{label}» пока нет записанного содержимого."
-      when ["ru", "ownership"] then "Владелец «#{label}» пока не записан."
-      when ["ru", "custody"] then "Custody для «#{label}» пока не записано."
+      when ["uk", "custody"] then "Хто зберігає «#{label}», поки не записано."
       when ["en", "location"] then "The location of “#{label}” is not recorded yet."
       when ["en", "contents"] then "No contents are recorded for “#{label}” yet."
       when ["en", "ownership"] then "The owner of “#{label}” is not recorded yet."
@@ -131,34 +127,31 @@ module WorldState
     def resolution_text(status, locale)
       case [locale, status]
       when ["uk", "ambiguous"] then "Є кілька можливих об'єктів. Потрібне уточнення."
-      when ["ru", "ambiguous"] then "Есть несколько возможных объектов. Нужно уточнение."
       when ["en", "ambiguous"] then "There are several possible matches. Clarification is needed."
       when ["uk", "unknown"] then "Не вдалося знайти відповідний об'єкт у World State."
-      when ["ru", "unknown"] then "Не удалось найти соответствующий объект в World State."
       else "No matching entity was found in World State."
       end
     end
 
     def ambiguous_location_text(label, locale)
-      case locale
-      when "uk" then "Для «#{label}» записано кілька можливих розташувань. Потрібне уточнення."
-      when "ru" then "Для «#{label}» записано несколько возможных расположений. Нужно уточнение."
-      else "Multiple possible locations are recorded for “#{label}”. Clarification is needed."
+      if locale == "uk"
+        "Для «#{label}» записано кілька можливих розташувань. Потрібне уточнення."
+      else
+        "Multiple possible locations are recorded for “#{label}”. Clarification is needed."
       end
     end
 
     def conflict_location_text(label, locale)
-      case locale
-      when "uk" then "У даних про розташування «#{label}» є цикл. Потрібно виправити World State."
-      when "ru" then "В данных о расположении «#{label}» есть цикл. Нужно исправить World State."
-      else "The location data for “#{label}” contains a cycle. World State needs correction."
+      if locale == "uk"
+        "У даних про розташування «#{label}» є цикл. Потрібно виправити World State."
+      else
+        "The location data for “#{label}” contains a cycle. World State needs correction."
       end
     end
 
     def detect_locale(message)
       text = message.to_s
-      return "uk" if text.match?(/[іїєґІЇЄҐ]/)
-      return "ru" if text.match?(/[А-Яа-яЁё]/)
+      return "uk" if text.match?(/\p{Cyrillic}/u)
 
       "en"
     end
