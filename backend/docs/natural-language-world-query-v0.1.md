@@ -51,7 +51,7 @@ POST /api/worlds/:id/natural_query/clarifications/:clarification_id/answer
 
 ```json
 {
-  "action": "select",
+  "clarification_action": "select",
   "option_id": "1"
 }
 ```
@@ -60,9 +60,11 @@ Or close the ambiguity without guessing:
 
 ```json
 {
-  "action": "none_of_above"
+  "clarification_action": "none_of_above"
 }
 ```
+
+`clarification_action` is intentionally distinct from Rails' reserved route `action` parameter.
 
 The resume context stores the original bounded query, message, and optional depth. A selected option is revalidated by the existing `AnswerClarification` service before its durable entity ID is used. The interpreter is not called again.
 
