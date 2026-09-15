@@ -1,8 +1,12 @@
 require "test_helper"
+require "tmpdir"
 
 class WorldStateNaturalLocationCommandTest < ActiveSupport::TestCase
   setup do
-    @store = WorldState::Stores::Memory.new
+    @world_dir = Dir.mktmpdir
+    @proposal_dir = Dir.mktmpdir
+    @store = WorldState::Stores::JsonDirectory.new(path: @world_dir)
+    @proposal_store = WorldState::ProposalStores::JsonDirectory.new(path: @proposal_dir)
     @world = @store.create
     @cables_id = SecureRandom.uuid
     @box_id = SecureRandom.uuid
@@ -13,7 +17,11 @@ class WorldStateNaturalLocationCommandTest < ActiveSupport::TestCase
       world.fetch("entities") << { "id" => @box_id, "kind" => "container", "label" => "синя коробка", "attributes" => {} }
       world.fetch("entities") << { "id" => @shelf_id, "kind" => "furniture", "label" => "полиця", "attributes" => {} }
     end
-    @proposal_store = WorldState::ProposalStores::Memory.new
+  end
+
+  teardown do
+    FileUtils.remove_entry(@world_dir) if File.exist?(@world_dir)
+    FileUtils.remove_entry(@proposal_dir) if File.exist?(@proposal_dir)
   end
 
   test "proposes an explicit Ukrainian location assertion without mutating world" do
