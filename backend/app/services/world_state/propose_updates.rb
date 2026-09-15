@@ -21,24 +21,46 @@ module WorldState
     end
 
     def call
+      persist(prepared: prepare)
+    end
+
+    # Proposal computation may involve a remote model provider. Keep it free of
+    # durable writes so callers can run it outside database transactions/locks.
+    def prepare
       raise ArgumentError, "situation must not be empty" if @situation.empty?
 
       world = @store.fetch(@world_id)
       proposed = @proposer.call(situation: @situation, world_state: world)
-      proposals = proposed.map do |proposal|
+
+      {
+        "mode" => @proposer.mode,
+        "world_id" => world.fetch("id"),
+        "proposed" => proposed,
+        "usage" => @proposer.usage
+      }
+    end
+
+    # Persist only a previously computed proposal plan. This phase is local and
+    # deterministic and is safe to place inside a short database transaction.
+    def persist(prepared:)
+      plan = prepared.to_h
+      raise ArgumentError, "proposal plan belongs to another world" unless plan.fetch("world_id") == @world_id
+      raise ArgumentError, "proposal plan mode changed" unless plan.fetch("mode") == @proposer.mode
+
+      proposals = Array(plan.fetch("proposed")).map do |proposal|
         @proposal_store.create(
-          world_id: world.fetch("id"),
+          world_id: @world_id,
           proposal: proposal,
-          proposer_mode: @proposer.mode,
+          proposer_mode: plan.fetch("mode"),
           context: proposal_context
         )
       end
 
       {
-        "mode" => @proposer.mode,
-        "world_id" => world.fetch("id"),
+        "mode" => plan.fetch("mode"),
+        "world_id" => @world_id,
         "proposals" => proposals,
-        "usage" => @proposer.usage
+        "usage" => plan.fetch("usage")
       }
     end
 
