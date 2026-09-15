@@ -61,8 +61,12 @@ module WorldState
       alias_entity["merged_into_entity_id"] = canonical.fetch("id")
       alias_entity["merged_at"] = Time.now.utc.iso8601(6)
 
-      rewrite_claim_references(world, from_id: alias_entity.fetch("id"), to_id: canonical.fetch("id"))
-      coalesce_equivalent_singletons!(world)
+      changed_claim_ids = rewrite_claim_references(
+        world,
+        from_id: alias_entity.fetch("id"),
+        to_id: canonical.fetch("id")
+      )
+      coalesce_equivalent_singletons!(world, changed_claim_ids: changed_claim_ids)
 
       build_review(
         "canonical_entity_id" => canonical.fetch("id"),
@@ -131,7 +135,6 @@ module WorldState
     def validate_singleton_integrity_after_merge!(world, from_id:, to_id:)
       projected = active_singleton_claims(world).map do |claim|
         {
-          claim: claim,
           touched: claim_references_entity?(claim, from_id),
           slot: projected_slot(claim, from_id: from_id, to_id: to_id),
           object: projected_object(claim, from_id: from_id, to_id: to_id)
@@ -170,6 +173,8 @@ module WorldState
     end
 
     def rewrite_claim_references(world, from_id:, to_id:)
+      changed_claim_ids = []
+
       world.fetch("claims").each do |claim|
         changed = false
 
@@ -185,26 +190,29 @@ module WorldState
 
         next unless changed
 
+        changed_claim_ids << claim.fetch("id")
         claim["identity_rewrite"] = {
           "from_entity_id" => from_id,
           "to_entity_id" => to_id,
           "rewritten_at" => Time.now.utc.iso8601(6)
         }
       end
+
+      changed_claim_ids
     end
 
     # Equivalent singleton claims are safe to collapse after an identity merge.
-    # Prefer an existing canonical claim over one that had to be rewritten and
+    # Prefer an existing canonical claim over one changed by this rewrite and
     # preserve the duplicate as history instead of deleting it.
-    def coalesce_equivalent_singletons!(world)
+    def coalesce_equivalent_singletons!(world, changed_claim_ids:)
       active_singleton_claims(world)
         .group_by { |claim| [claim["subject_id"], claim["predicate"], claim["key"].to_s] }
         .each_value do |claims|
           next unless claims.size > 1
-          next unless claims.any? { |claim| claim["identity_rewrite"] }
-          next unless claims.map { |claim| claim.fetch("object", {}) }.uniq.one?
+          next unless claims.any? { |claim| changed_claim_ids.include?(claim.fetch("id")) }
+          next unless claims.map { |claim| claim.fetch("object", {}) }.uniq.size == 1
 
-          winner = claims.min_by { |claim| claim["identity_rewrite"] ? 1 : 0 }
+          winner = claims.min_by { |claim| changed_claim_ids.include?(claim.fetch("id")) ? 1 : 0 }
           claims.each do |claim|
             next if claim.equal?(winner)
 
