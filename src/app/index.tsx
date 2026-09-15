@@ -15,10 +15,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { RechiboxLogo } from '@/components/RechiboxLogo';
 import {
+  answerWorldClarification,
   askWorld,
   getWorldQueryConfiguration,
   WorldQueryClientError,
   type WorldQueryAnswerStatus,
+  type WorldQueryClarification,
+  type WorldQueryClarificationOption,
 } from '@/world-query/client';
 import { bootstrapWorldSession, type WorldSession } from '@/world-query/session';
 
@@ -27,6 +30,7 @@ type ChatMessage = {
   role: 'user' | 'assistant';
   text: string;
   status?: WorldQueryAnswerStatus;
+  clarification?: WorldQueryClarification;
 };
 
 export default function HomeScreen() {
@@ -38,6 +42,7 @@ export default function HomeScreen() {
   const [draft, setDraft] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isSending, setIsSending] = useState(false);
+  const [resolvingClarificationId, setResolvingClarificationId] = useState<string | null>(null);
   const [session, setSession] = useState<WorldSession | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(configuration.ready);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
@@ -81,7 +86,7 @@ export default function HomeScreen() {
 
   const submit = async () => {
     const message = draft.trim();
-    if (!message || isSending || !session) return;
+    if (!message || isSending || resolvingClarificationId || !session) return;
 
     setDraft('');
     appendMessage({ role: 'user', text: message });
@@ -89,7 +94,14 @@ export default function HomeScreen() {
 
     try {
       const result = await askWorld(message, session.worldId);
-      if (result.answer?.text) {
+      if (result.clarification) {
+        appendMessage({
+          role: 'assistant',
+          text: result.clarification.question,
+          status: 'ambiguous',
+          clarification: result.clarification,
+        });
+      } else if (result.answer?.text) {
         appendMessage({
           role: 'assistant',
           text: result.answer.text,
@@ -119,7 +131,48 @@ export default function HomeScreen() {
     }
   };
 
-  const composerDisabled = isSending || isBootstrapping || !session;
+  const resolveClarification = async (
+    messageId: number,
+    clarification: WorldQueryClarification,
+    option: WorldQueryClarificationOption | null,
+  ) => {
+    if (!session || resolvingClarificationId) return;
+
+    setResolvingClarificationId(clarification.id);
+    setMessages((current) =>
+      current.map((message) =>
+        message.id === messageId ? { ...message, clarification: undefined } : message,
+      ),
+    );
+    appendMessage({ role: 'user', text: option?.label ?? 'Жоден із варіантів' });
+
+    try {
+      const result = await answerWorldClarification(
+        session.worldId,
+        clarification.id,
+        option?.option_id ?? null,
+      );
+      if (result.answer?.text) {
+        appendMessage({
+          role: 'assistant',
+          text: result.answer.text,
+          status: result.answer.status,
+        });
+      } else {
+        appendMessage({
+          role: 'assistant',
+          text: 'Не вдалося продовжити пошук після уточнення.',
+          status: 'unavailable',
+        });
+      }
+    } catch (error) {
+      appendMessage({ role: 'assistant', text: errorMessage(error), status: 'unavailable' });
+    } finally {
+      setResolvingClarificationId(null);
+    }
+  };
+
+  const composerDisabled = isSending || Boolean(resolvingClarificationId) || isBootstrapping || !session;
   const sendDisabled = composerDisabled || draft.trim().length === 0;
 
   return (
@@ -210,14 +263,45 @@ export default function HomeScreen() {
                     <Text style={[styles.statusText, { color: colors.text }]}>{statusLabel(message.status)}</Text>
                   ) : null}
                 </View>
+                {message.clarification ? (
+                  <View style={styles.clarificationOptions}>
+                    {message.clarification.options.map((option) => (
+                      <Pressable
+                        accessibilityLabel={`Обрати ${option.label}`}
+                        accessibilityRole="button"
+                        disabled={Boolean(resolvingClarificationId)}
+                        key={option.option_id}
+                        onPress={() => void resolveClarification(message.id, message.clarification!, option)}
+                        style={({ pressed }) => [
+                          styles.clarificationOption,
+                          {
+                            backgroundColor: colors.card,
+                            borderColor: colors.border,
+                            opacity: pressed ? 0.65 : 1,
+                          },
+                        ]}>
+                        <Text style={[styles.clarificationOptionLabel, { color: colors.text }]}>{option.label}</Text>
+                        <Text style={[styles.clarificationOptionKind, { color: colors.text }]}>{kindLabel(option.kind)}</Text>
+                      </Pressable>
+                    ))}
+                    <Pressable
+                      accessibilityLabel="Жоден із варіантів"
+                      accessibilityRole="button"
+                      disabled={Boolean(resolvingClarificationId)}
+                      onPress={() => void resolveClarification(message.id, message.clarification!, null)}
+                      style={({ pressed }) => [styles.noneOption, { opacity: pressed ? 0.65 : 1 }]}>
+                      <Text style={[styles.noneOptionText, { color: colors.primary }]}>Жоден із варіантів</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
               </View>
             ))
           )}
-          {isSending ? (
+          {isSending || resolvingClarificationId ? (
             <View style={[styles.loadingBubble, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <ActivityIndicator color={colors.primary} size="small" />
               <Text accessibilityLiveRegion="polite" style={[styles.loadingText, { color: colors.text }]}>
-                Шукаю у World State…
+                {resolvingClarificationId ? 'Продовжую пошук…' : 'Шукаю у World State…'}
               </Text>
             </View>
           ) : null}
@@ -312,13 +396,26 @@ function statusLabel(status: WorldQueryAnswerStatus) {
   }
 }
 
+function kindLabel(kind: string) {
+  switch (kind) {
+    case 'container':
+      return 'Контейнер';
+    case 'item':
+      return 'Річ';
+    case 'space':
+      return 'Місце';
+    case 'furniture':
+      return 'Меблі';
+    case 'person':
+      return 'Людина';
+    default:
+      return kind;
+  }
+}
+
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-  },
-  keyboardAvoidingView: {
-    flex: 1,
-  },
+  screen: { flex: 1 },
+  keyboardAvoidingView: { flex: 1 },
   header: {
     minHeight: 58,
     paddingHorizontal: 18,
@@ -329,14 +426,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
   },
-  logo: {
-    width: 142,
-    height: 34,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
+  logo: { width: 142, height: 34 },
+  headerActions: { flexDirection: 'row', gap: 8 },
   headerButton: {
     minHeight: 40,
     justifyContent: 'center',
@@ -344,39 +435,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 20,
   },
-  headerButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  messages: {
-    flex: 1,
-  },
+  headerButtonText: { fontSize: 14, fontWeight: '600' },
+  messages: { flex: 1 },
   messagesContent: {
     flexGrow: 1,
     paddingHorizontal: 18,
     paddingVertical: 20,
     gap: 12,
   },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingVertical: 28,
-    gap: 10,
-  },
-  title: {
-    fontSize: 30,
-    lineHeight: 36,
-    fontWeight: '700',
-  },
-  subtitle: {
-    fontSize: 17,
-    lineHeight: 24,
-    opacity: 0.7,
-  },
-  examples: {
-    marginTop: 14,
-    gap: 10,
-  },
+  emptyState: { flex: 1, justifyContent: 'center', paddingVertical: 28, gap: 10 },
+  title: { fontSize: 30, lineHeight: 36, fontWeight: '700' },
+  subtitle: { fontSize: 17, lineHeight: 24, opacity: 0.7 },
+  examples: { marginTop: 14, gap: 10 },
   example: {
     alignSelf: 'flex-start',
     minHeight: 44,
@@ -386,34 +456,31 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 22,
   },
-  exampleText: {
-    fontSize: 15,
-  },
-  messageRow: {
-    width: '100%',
-  },
-  userMessageRow: {
-    alignItems: 'flex-end',
-  },
-  assistantMessageRow: {
-    alignItems: 'flex-start',
-  },
+  exampleText: { fontSize: 15 },
+  messageRow: { width: '100%', gap: 8 },
+  userMessageRow: { alignItems: 'flex-end' },
+  assistantMessageRow: { alignItems: 'flex-start' },
   bubble: {
     maxWidth: '86%',
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 11,
   },
-  messageText: {
-    fontSize: 16,
-    lineHeight: 22,
+  messageText: { fontSize: 16, lineHeight: 22 },
+  statusText: { marginTop: 7, fontSize: 12, fontWeight: '600', opacity: 0.55 },
+  clarificationOptions: { width: '86%', gap: 7 },
+  clarificationOption: {
+    minHeight: 48,
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderWidth: 1,
+    borderRadius: 14,
   },
-  statusText: {
-    marginTop: 7,
-    fontSize: 12,
-    fontWeight: '600',
-    opacity: 0.55,
-  },
+  clarificationOptionLabel: { fontSize: 15, lineHeight: 20, fontWeight: '600' },
+  clarificationOptionKind: { marginTop: 2, fontSize: 12, opacity: 0.55 },
+  noneOption: { minHeight: 40, justifyContent: 'center', paddingHorizontal: 8 },
+  noneOptionText: { fontSize: 14, fontWeight: '600' },
   loadingBubble: {
     alignSelf: 'flex-start',
     minHeight: 44,
@@ -424,10 +491,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
   },
-  loadingText: {
-    fontSize: 14,
-    opacity: 0.7,
-  },
+  loadingText: { fontSize: 14, opacity: 0.7 },
   composerArea: {
     paddingHorizontal: 14,
     paddingTop: 10,
@@ -442,20 +506,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
   },
-  connectionNote: {
-    fontSize: 12,
-    textAlign: 'center',
-    opacity: 0.55,
-  },
-  retryText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  composerRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 8,
-  },
+  connectionNote: { fontSize: 12, textAlign: 'center', opacity: 0.55 },
+  retryText: { fontSize: 12, fontWeight: '700' },
+  composerRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
   input: {
     flex: 1,
     minHeight: 48,
@@ -475,12 +528,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sendButtonText: {
-    color: '#FFFFFF',
-    fontSize: 26,
-    lineHeight: 28,
-    fontWeight: '700',
-  },
+  sendButtonText: { color: '#FFFFFF', fontSize: 26, lineHeight: 28, fontWeight: '700' },
   cameraLink: {
     minHeight: 32,
     textAlign: 'center',
