@@ -22,7 +22,7 @@ Archetype: none
 Target platforms: iOS, Android
 Native ownership: CNG / Prebuild
 
-The `/inventory` camera workflow explicitly uses the `camera-operational` archetype as task-scoped guidance only. It does not select that archetype for the whole product.
+The `/inventory` and `/box-scan` camera workflows explicitly use the `camera-operational` archetype as task-scoped guidance only. They do not select that archetype for the whole product.
 
 ## Project baseline and commands
 
@@ -38,6 +38,7 @@ lint: npm run lint
 test: none (no automated test suite yet)
 ios simulator / Expo Go: npm run ios
 android emulator / Expo Go: npm run android
+android emulator native build: npm run android:native
 physical-device diagnostics: npm run device:check
 physical iPhone / Expo Go: npm run iphone
 physical iPhone native build: npm run iphone:native
@@ -46,7 +47,7 @@ dependency compatibility: npx expo install --check
 project diagnostics: npx expo-doctor
 ```
 
-`ios`, `android`, and `iphone` use Expo Go and do not build a product-specific native binary. `iphone:native` uses CNG plus `expo run:ios --device`; it may generate ignored `ios/` output locally, build with Xcode, install the app on a physical device, and verify native/config-plugin behavior. Local Apple signing credentials remain machine-local and must not be committed.
+`ios`, `android`, and `iphone` use Expo Go and do not build a product-specific native binary. `android:native` uses CNG plus `expo run:android` against a connected emulator/device. `iphone:native` uses CNG plus `expo run:ios --device`; it may generate ignored `ios/` output locally, build with Xcode, install the app on a physical device, and verify native/config-plugin behavior. Generated native output remains ignored and must not become the configuration source of truth. Local signing credentials remain machine-local and must not be committed.
 
 ## Always follow
 
@@ -77,12 +78,14 @@ Do not load every shared document for every small task. Read product/domain docu
 - `app.json` and config plugins are the native source of truth. Keep generated `ios/` and `android/` out of source control; do not leave persistent changes only in generated native files.
 - Native identity is display name `Rechibox`, slug `rechibox`, scheme `rechibox`, iOS bundle identifier `com.sergii.rechibox`, and Android package `com.sergii.rechibox`. Do not change bundle/package identifiers casually: changing them changes application identity. Production domain/API URL, EAS project ID, store records, and release signing/distribution policy remain unset until explicitly decided.
 - Do not commit developer certificates, provisioning profiles, keychain data, Apple credentials, device IDs, or machine-specific Xcode signing state. Native development builds may use locally available Xcode automatic signing.
-- `expo-camera` is the product-owned camera dependency for the `/inventory` slice. The camera config plugin owns the product camera permission string; audio recording and barcode scanning are not part of this slice.
-- Only mount the live camera while the inventory flow needs it and the application is active. Re-check camera permission after returning to the foreground, and model denied permission, camera mount failure, capture failure, and retry states explicitly.
+- `expo-camera` is the product-owned camera dependency for both `/inventory` photo capture and `/box-scan` QR scanning. The camera config plugin owns the product camera permission string. Audio recording remains disabled; QR is the only barcode format required by the current Box Identity slice.
+- Only mount a live camera while the relevant camera flow needs it and the application is active. Re-check camera permission after returning to the foreground, and model denied permission, camera mount failure, capture/scan failure, and retry states explicitly.
 - Inventory recognition is real on-device inference through `react-native-executorch` using the configured YOLO26 model. The captured photo is not uploaded to a Rechibox backend. Model assets may require a first-run download, so represent model readiness and failure states honestly.
-- Recognition confidence and low-confidence correction remain part of the inventory interaction. User confirmation persists accepted items locally in `expo-sqlite`; it does not imply backend synchronization.
+- Recognition confidence and low-confidence correction remain part of the inventory interaction. User confirmation persists accepted items to the local inventory source of truth. The current World State integration may project that local inventory to the configured backend as a device-local snapshot, but it does not make the backend the canonical inventory store or provide cross-device synchronization.
 - Local inventory persistence is an implemented product capability. Physical inventory boxes/containers may be persisted locally and linked to inventory items. Keep schema migrations explicit and preserve existing local data across upgrades.
-- Backend inventory sync, accounts, cross-device/offline synchronization, production API contracts, and release policy remain deferred until explicitly implemented.
+- Box Identity separates human and machine identity. `BOX-000001`-style codes are human-facing labels derived from the local numeric row id; QR payloads use an opaque 128-bit `public_id` in the form `rechibox://box/<public_id>`. Do not use the display code as the machine identity or database key.
+- `react-native-qrcode-svg` is the product-owned QR renderer for Box Identity and builds on the already-owned `react-native-svg` dependency. Keep scanning on `expo-camera` unless measured product requirements justify a different camera stack.
+- Device-local inventory snapshot sync into World State is implemented and remains subordinate to local inventory. Accounts, cross-device/offline synchronization, backend QR resolution, production API contracts, and release policy remain deferred until explicitly implemented.
 - Expo icons/splash assets remain development placeholders.
-- Keep code comments in English. Do not infer booking/resource models or claim backend/offline synchronization before product requirements define them.
-- Run strict TypeScript, lint, and relevant Expo checks. Inspect the running app on targeted platforms and state verification limits honestly. Camera-critical behavior should be exercised on a physical device. Expo Go can verify the JavaScript camera flow; use the native physical-device runner when config-plugin/native behavior matters.
+- Keep code comments in English. Do not infer booking/resource models or claim cross-device/backend-canonical inventory behavior before product requirements define it.
+- Run strict TypeScript, lint, and relevant Expo checks. Inspect the running app on targeted platforms and state verification limits honestly. Camera-critical behavior should be exercised on a physical device or an emulator with a controlled camera feed. Expo Go can verify the JavaScript camera flow; use a product-specific native build when config-plugin/native behavior matters.

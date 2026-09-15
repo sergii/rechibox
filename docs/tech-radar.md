@@ -9,11 +9,12 @@ This document records technologies worth adopting, trying, assessing, or deliber
 - **Assess** - promising candidate worth revisiting when a concrete requirement appears.
 - **Hold** - do not introduce without a new reason and explicit re-evaluation.
 
-## Mobile scanning
+## Mobile scanning and QR
 
 | Technology | Ring | Decision | Revisit when |
 | --- | --- | --- | --- |
-| `expo-camera` barcode/QR scanning | Adopt | Use the existing camera stack for the first Box Identity QR flow. Rechibox already owns `expo-camera`, and one-at-a-time box scanning does not justify another native camera stack. Enable barcode scanning only when the QR slice is implemented. | If the current scanner becomes a measurable UX or reliability bottleneck. |
+| `expo-camera` barcode/QR scanning | Adopt | Use the existing camera stack for the first Box Identity QR flow. Rechibox already owns `expo-camera`, and one-at-a-time box scanning does not justify another native camera stack. | If the current scanner becomes a measurable UX or reliability bottleneck. |
+| `react-native-qrcode-svg` | Adopt | Render Box Identity QR codes locally. It is a JavaScript QR renderer on top of the already-owned `react-native-svg`, so it does not require replacing the camera stack or adding another native scanning engine. | If printing/export requirements need a different QR output pipeline or the renderer becomes a measured compatibility problem. |
 | `react-native-nitro-zxing` | Assess | Promising high-performance barcode/QR scanner for React Native, especially for continuous or high-throughput scanning. Do not install now. Adoption would also pull Rechibox toward the VisionCamera/Nitro native stack and require a new native binary, so the complexity is not justified for the current single-box QR flow. | Continuous rapid scanning; small, damaged, skewed, or difficult codes; multiple codes in frame; required barcode formats that the current path handles poorly; or measured latency/reliability problems with `expo-camera`. |
 | `react-native-vision-camera` | Assess | Do not migrate the existing camera flow just to gain faster QR scanning. Consider it together with Nitro ZXing if camera throughput or frame-processing requirements become a product need beyond still-photo inventory capture. | The product needs real-time frame processors, high-throughput scanning, or other VisionCamera-specific capabilities. |
 
@@ -23,11 +24,13 @@ The first implementation should stay intentionally small:
 
 ```text
 physical box
-  -> QR identity (BOX-...)
+  -> QR identity (BOX-... label + opaque public id)
   -> expo-camera scan
-  -> resolve box
+  -> resolve local box
   -> show box contents
 ```
+
+The human-facing `BOX-...` code is not the machine identity. QR payloads use `rechibox://box/<public_id>` so a display label can change independently from the opaque identifier.
 
 Benchmark or migrate to another scanning stack only after the real Box Identity flow demonstrates a problem. A synthetic throughput benchmark alone is not a reason to add native dependencies.
 
