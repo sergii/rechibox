@@ -1,5 +1,5 @@
 import { useRouter, useTheme } from 'expo-router';
-import { type ComponentRef, useRef, useState } from 'react';
+import { type ComponentRef, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -20,6 +20,7 @@ import {
   WorldQueryClientError,
   type WorldQueryAnswerStatus,
 } from '@/world-query/client';
+import { bootstrapWorldSession, type WorldSession } from '@/world-query/session';
 
 type ChatMessage = {
   id: number;
@@ -33,10 +34,44 @@ export default function HomeScreen() {
   const router = useRouter();
   const scrollViewRef = useRef<ComponentRef<typeof ScrollView>>(null);
   const nextMessageId = useRef(1);
+  const configuration = getWorldQueryConfiguration();
   const [draft, setDraft] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isSending, setIsSending] = useState(false);
-  const configuration = getWorldQueryConfiguration();
+  const [session, setSession] = useState<WorldSession | null>(null);
+  const [isBootstrapping, setIsBootstrapping] = useState(configuration.ready);
+  const [bootstrapError, setBootstrapError] = useState<string | null>(null);
+  const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
+
+  useEffect(() => {
+    if (!configuration.ready) return;
+
+    let cancelled = false;
+
+    void bootstrapWorldSession()
+      .then((nextSession) => {
+        if (!cancelled) setSession(nextSession);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setSession(null);
+          setBootstrapError(errorMessage(error));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsBootstrapping(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [bootstrapAttempt, configuration.apiUrl, configuration.ready]);
+
+  const retryBootstrap = () => {
+    setBootstrapError(null);
+    setIsBootstrapping(true);
+    setBootstrapAttempt((current) => current + 1);
+  };
 
   const appendMessage = (message: Omit<ChatMessage, 'id'>) => {
     const id = nextMessageId.current;
@@ -46,14 +81,14 @@ export default function HomeScreen() {
 
   const submit = async () => {
     const message = draft.trim();
-    if (!message || isSending) return;
+    if (!message || isSending || !session) return;
 
     setDraft('');
     appendMessage({ role: 'user', text: message });
     setIsSending(true);
 
     try {
-      const result = await askWorld(message);
+      const result = await askWorld(message, session.worldId);
       if (result.answer?.text) {
         appendMessage({
           role: 'assistant',
@@ -83,6 +118,9 @@ export default function HomeScreen() {
       setIsSending(false);
     }
   };
+
+  const composerDisabled = isSending || isBootstrapping || !session;
+  const sendDisabled = composerDisabled || draft.trim().length === 0;
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]}>
@@ -188,11 +226,26 @@ export default function HomeScreen() {
         <View style={[styles.composerArea, { borderTopColor: colors.border }]}>
           {!configuration.ready ? (
             <Text style={[styles.connectionNote, { color: colors.text }]}>Backend не підключено в цій збірці.</Text>
+          ) : isBootstrapping ? (
+            <View style={styles.connectionRow}>
+              <ActivityIndicator color={colors.primary} size="small" />
+              <Text style={[styles.connectionNote, { color: colors.text }]}>Підключаю ваш простір…</Text>
+            </View>
+          ) : bootstrapError ? (
+            <View style={styles.connectionRow}>
+              <Text style={[styles.connectionNote, { color: colors.text }]}>{bootstrapError}</Text>
+              <Pressable
+                accessibilityLabel="Повторити підключення"
+                accessibilityRole="button"
+                onPress={retryBootstrap}>
+                <Text style={[styles.retryText, { color: colors.primary }]}>Повторити</Text>
+              </Pressable>
+            </View>
           ) : null}
           <View style={styles.composerRow}>
             <TextInput
               accessibilityLabel="Запит до Rechibox"
-              editable={!isSending}
+              editable={!composerDisabled}
               multiline
               onChangeText={setDraft}
               onSubmitEditing={() => void submit()}
@@ -209,14 +262,14 @@ export default function HomeScreen() {
             <Pressable
               accessibilityLabel="Надіслати запит"
               accessibilityRole="button"
-              accessibilityState={{ disabled: isSending || draft.trim().length === 0 }}
-              disabled={isSending || draft.trim().length === 0}
+              accessibilityState={{ disabled: sendDisabled }}
+              disabled={sendDisabled}
               onPress={() => void submit()}
               style={({ pressed }) => [
                 styles.sendButton,
                 {
                   backgroundColor: colors.primary,
-                  opacity: isSending || draft.trim().length === 0 ? 0.35 : pressed ? 0.65 : 1,
+                  opacity: sendDisabled ? 0.35 : pressed ? 0.65 : 1,
                 },
               ]}>
               <Text style={styles.sendButtonText}>↑</Text>
@@ -382,10 +435,21 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: 7,
   },
+  connectionRow: {
+    minHeight: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
   connectionNote: {
     fontSize: 12,
     textAlign: 'center',
     opacity: 0.55,
+  },
+  retryText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   composerRow: {
     flexDirection: 'row',

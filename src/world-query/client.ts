@@ -38,19 +38,21 @@ type JsonObject = Record<string, unknown>;
 
 export function getWorldQueryConfiguration() {
   const apiUrl = process.env.EXPO_PUBLIC_RECHIBOX_API_URL?.trim().replace(/\/+$/, '') ?? '';
-  const worldId = process.env.EXPO_PUBLIC_RECHIBOX_WORLD_ID?.trim() ?? '';
 
   return {
     apiUrl,
-    worldId,
-    ready: apiUrl.length > 0 && worldId.length > 0,
+    ready: apiUrl.length > 0,
   };
 }
 
-export async function askWorld(message: string): Promise<NaturalWorldQueryResult> {
+export async function askWorld(message: string, worldId: string): Promise<NaturalWorldQueryResult> {
   const text = message.trim();
+  const normalizedWorldId = worldId.trim();
   if (!text) {
     throw new WorldQueryClientError('request_failed', 'Message must not be blank.');
+  }
+  if (!normalizedWorldId) {
+    throw new WorldQueryClientError('request_failed', 'World State id must not be blank.');
   }
 
   const configuration = getWorldQueryConfiguration();
@@ -64,7 +66,7 @@ export async function askWorld(message: string): Promise<NaturalWorldQueryResult
   let response: Response;
   try {
     response = await fetch(
-      `${configuration.apiUrl}/api/worlds/${encodeURIComponent(configuration.worldId)}/natural_query`,
+      `${configuration.apiUrl}/api/worlds/${encodeURIComponent(normalizedWorldId)}/natural_query`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
