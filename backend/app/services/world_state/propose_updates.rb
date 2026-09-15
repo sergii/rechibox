@@ -5,13 +5,19 @@ module WorldState
       situation:,
       proposer: Ai::StateUpdateProposer.default,
       store: Store.default,
-      proposal_store: ProposalStore.default
+      proposal_store: ProposalStore.default,
+      conversation_id: nil,
+      message_id: nil,
+      turn_id: nil
     )
       @world_id = world_id
       @situation = situation.to_h
       @proposer = proposer
       @store = store
       @proposal_store = proposal_store
+      @conversation_id = conversation_id
+      @message_id = message_id
+      @turn_id = turn_id
     end
 
     def call
@@ -23,7 +29,8 @@ module WorldState
         @proposal_store.create(
           world_id: world.fetch("id"),
           proposal: proposal,
-          proposer_mode: @proposer.mode
+          proposer_mode: @proposer.mode,
+          context: proposal_context
         )
       end
 
@@ -33,6 +40,16 @@ module WorldState
         "proposals" => proposals,
         "usage" => @proposer.usage
       }
+    end
+
+    private
+
+    def proposal_context
+      {
+        "conversation_id" => @conversation_id,
+        "message_id" => @message_id,
+        "turn_id" => @turn_id
+      }.compact
     end
   end
 end

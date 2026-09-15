@@ -14,9 +14,10 @@ module WorldState
         @path = Pathname.new(path)
       end
 
-      def create(world_id:, proposal:, proposer_mode:)
+      def create(world_id:, proposal:, proposer_mode:, context: nil)
         validate_uuid!(world_id, "world state")
         now = Time.now.utc.iso8601(6)
+        lifecycle = normalized_context(context)
         record = {
           "contract_version" => CONTRACT_VERSION,
           "id" => SecureRandom.uuid,
@@ -27,7 +28,10 @@ module WorldState
           "proposer_mode" => proposer_mode,
           "update" => proposal.fetch("update"),
           "reason" => proposal["reason"],
-          "validation" => proposal.fetch("validation")
+          "validation" => proposal.fetch("validation"),
+          "conversation_id" => lifecycle["conversation_id"],
+          "message_id" => lifecycle["message_id"],
+          "turn_id" => lifecycle["turn_id"]
         }.compact
         write(record)
         record
@@ -97,6 +101,12 @@ module WorldState
         temporary = Pathname.new("#{target}.tmp")
         File.write(temporary, JSON.generate(record))
         File.rename(temporary, target)
+      end
+
+      def normalized_context(context)
+        return {} unless context
+
+        context.to_h.transform_keys(&:to_s).slice("conversation_id", "message_id", "turn_id")
       end
     end
   end
