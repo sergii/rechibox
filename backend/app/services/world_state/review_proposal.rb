@@ -3,6 +3,7 @@ require "time"
 module WorldState
   class ReviewProposal
     ACTIONS = %w[accept reject].freeze
+    TERMINAL_STATUSES = %w[accepted rejected stale].freeze
 
     def initialize(
       world_id:,
@@ -10,7 +11,8 @@ module WorldState
       action:,
       rejection_reason: nil,
       proposal_store: ProposalStore.default,
-      world_store: Store.default
+      world_store: Store.default,
+      turn_store: Conversations::TurnStore.default
     )
       @world_id = world_id
       @proposal_id = proposal_id
@@ -18,6 +20,7 @@ module WorldState
       @rejection_reason = rejection_reason.to_s.strip
       @proposal_store = proposal_store
       @world_store = world_store
+      @turn_store = turn_store
     end
 
     def call
@@ -32,7 +35,14 @@ module WorldState
       proposal = @proposal_store.fetch(world_id: @world_id, id: @proposal_id)
       raise ArgumentError, "proposal is not pending" unless proposal.fetch("status") == "pending"
 
-      @action == "accept" ? accept(proposal) : reject
+      result = @action == "accept" ? accept(proposal) : reject
+      turn = synchronize_turn(result.fetch("proposal"))
+      return result unless turn
+
+      result.merge(
+        "turn" => turn,
+        "conversation_status" => turn.fetch("status")
+      )
     end
 
     def accept(proposal)
@@ -41,6 +51,7 @@ module WorldState
 
       unless validation.fetch("valid")
         stale = @proposal_store.update(world_id: @world_id, id: @proposal_id) do |record|
+          ensure_pending!(record)
           record["status"] = "stale"
           record["validation"] = validation
           record["resolved_at"] = Time.now.utc.iso8601(6)
@@ -56,6 +67,7 @@ module WorldState
       ).call
 
       accepted = @proposal_store.update(world_id: @world_id, id: @proposal_id) do |record|
+        ensure_pending!(record)
         record["status"] = "accepted"
         record["validation"] = validation
         record["resolved_at"] = Time.now.utc.iso8601(6)
@@ -66,12 +78,40 @@ module WorldState
 
     def reject
       rejected = @proposal_store.update(world_id: @world_id, id: @proposal_id) do |record|
+        ensure_pending!(record)
         record["status"] = "rejected"
         record["rejection_reason"] = @rejection_reason unless @rejection_reason.empty?
         record["resolved_at"] = Time.now.utc.iso8601(6)
       end
 
       { "proposal" => rejected, "world_state" => @world_store.fetch(@world_id) }
+    end
+
+    def synchronize_turn(proposal)
+      conversation_id = proposal["conversation_id"]
+      turn_id = proposal["turn_id"]
+      return unless conversation_id && turn_id
+
+      @turn_store.update(conversation_id: conversation_id, id: turn_id) do |turn|
+        proposal_ids = Array(turn["proposal_ids"])
+        raise ArgumentError, "proposal is not linked to conversation turn" unless proposal_ids.include?(proposal.fetch("id"))
+
+        statuses = proposal_ids.map do |proposal_id|
+          @proposal_store.fetch(world_id: @world_id, id: proposal_id).fetch("status")
+        end
+
+        if statuses.all? { |status| TERMINAL_STATUSES.include?(status) }
+          turn["status"] = "completed"
+          turn["completed_at"] ||= Time.now.utc.iso8601(6)
+        else
+          turn["status"] = "ready_for_review"
+          turn.delete("completed_at")
+        end
+      end
+    end
+
+    def ensure_pending!(record)
+      raise ArgumentError, "proposal is not pending" unless record.fetch("status") == "pending"
     end
   end
 end
