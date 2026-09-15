@@ -1,7 +1,9 @@
 module Ai
   class WorldQueryInterpreter
     def self.default
-      case ENV.fetch("AI_WORLD_QUERY_INTERPRETER", "disabled")
+      case ENV.fetch("AI_WORLD_QUERY_INTERPRETER", "deterministic")
+      when "deterministic"
+        WorldQueryInterpreters::Deterministic.new
       when "disabled"
         WorldQueryInterpreters::Disabled.new
       when "ruby_llm"
